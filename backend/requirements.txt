@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pymysql
+python-dotenv
+email-validator
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+jinja2
+weasyprint
+vercel>=0.5.0

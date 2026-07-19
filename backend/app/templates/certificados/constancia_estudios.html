@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block body_class %}documento constancia-estudios{% endblock %}
+
+{% block content %}
+<article class="documento-hoja constancia">
+  <div class="documento-borde"></div>
+
+  <header class="constancia-encabezado">
+    <div class="lineas-geometricas" aria-hidden="true">
+      <span class="linea linea-1"></span>
+      <span class="linea linea-2"></span>
+      <span class="linea linea-3"></span>
+      <span class="linea linea-4"></span>
+      <span class="linea linea-5"></span>
+    </div>
+
+    <section class="marca-institucional">
+      <img
+        class="logo-unifront"
+        src="{{ static_url|default('/static', true) }}/UnifrontLogo.png"
+        alt="UNIFRONT"
+      />
+
+      <div class="datos-institucion">
+        <h1>CENTRO DE ESTUDIOS SUPERIORES DE LA FRONTERA</h1>
+        <p>Blvd. Bernardo O'Higgins No. 6050, Los Alamos</p>
+        <p>TELS. 660-19-23 Y 903-43-07</p>
+        <p>Clave Incorp. 02PSU0015M</p>
+        <p>RVOE-BC-L009-M2/17</p>
+      </div>
+    </section>
+
+    <section class="documento-meta">
+      <p><strong>Departamento:</strong> {{ documento.departamento }}</p>
+      <p><strong>Asunto:</strong> {{ documento.asunto }}</p>
+    </section>
+  </header>
+
+  <main class="constancia-cuerpo">
+    <p class="destinatario">A QUIEN CORRESPONDA</p>
+
+    <p>
+      Por medio de la presente hago constar que segun comprobantes que obran en
+      el archivo general del plantel, {{ txt.alumno }}:
+    </p>
+
+    <h2 class="nombre-alumno">
+      {{ nombre_completo|default(alumno.nombre_completo, true)|upper }}
+    </h2>
+
+    <p>
+      Cuya fotografia se muestra en el margen superior derecho, es estudiante en
+      esta Institucion con la matricula
+      <strong>{{ alumno.matricula|default(alumno.numero_control, true) }}</strong>,
+      se encuentra {{ txt.inscrito }} a esta Institucion en la carrera de
+      <strong>{{ nombre_carrera|default(alumno.carrera, true)|upper }}</strong>
+      {% if nombre_plan %}con el plan de estudios {{ nombre_plan }}{% endif %}.
+      {{ txt.alumno|capitalize }} curso el periodo escolar con horario de
+      {{ documento.horario }} y con un periodo vacacional del
+      {{ documento.periodo_vacacional }}.
+    </p>
+
+    <p>
+      Se extiende la presente constancia a peticion del {{ txt.interesado }} y
+      para los usos legales a que haya lugar, en la Ciudad de
+      {{ documento.ciudad }} {{ documento.estado }} al dia {{ fecha }}.
+    </p>
+
+    <section class="firma">
+      <p class="atentamente">A T E N T A M E N T E</p>
+      <div class="firma-linea"></div>
+      <p class="nombre-director">{{ director|default(documento.director, true) }}</p>
+      <p>{{ cargo_director|default(documento.cargo_director, true) }}</p>
+    </section>
+  </main>
+
+  <footer class="constancia-pie">
+    <section class="contacto-campus">
+      <p class="campus">{{ documento.campus }}</p>
+      <p>{{ documento.telefono }}</p>
+      <p>{{ documento.correo }}</p>
+      <p>{{ documento.direccion }}</p>
+      <p>Tijuana B.C. Mexico</p>
+    </section>
+
+    <section class="copias">
+      <p>C.c.p. Archivo alumno</p>
+      <p>C.c.p. Minutario.</p>
+    </section>
+
+    <p class="sitio-web">{{ documento.sitio_web }}</p>
+  </footer>
+</article>
+{% endblock %}

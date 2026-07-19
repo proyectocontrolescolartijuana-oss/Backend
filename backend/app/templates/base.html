@@ -1,0 +1,11 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="{{ static_url|default('/static', true) }}/styles/documentos.css" />
+  </head>
+
+  <body class="{% block body_class %}documento{% endblock %}">
+    {% block content %}{% endblock %}
+  </body>
+</html>
