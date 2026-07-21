@@ -17,10 +17,13 @@ class KardexCuatrimestre(BaseModel):
 
 class KardexResponse(BaseModel):
     matricula: str = ""
+    numero_control: str = ""
+    curp: str = ""
     primer_apellido: str = ""
     segundo_apellido: str = ""
     nombre: str = ""
     carrera: str = ""
+    rvoe: str = ""
     logo: Optional[str] = None
     plan_estudios: str = ""
     historial: List[KardexCuatrimestre] = Field(default_factory=list)
@@ -38,5 +41,6 @@ class KardexResponse(BaseModel):
 class KardexAlumnoBusqueda(BaseModel):
     id_alumno: int
     matricula: str = ""
+    numero_control: str = ""
     nombre: str = ""
     carrera: str = ""

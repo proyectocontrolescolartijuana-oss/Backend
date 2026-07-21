@@ -50,9 +50,9 @@ def _nombre_usuario(usuario):
         return None
 
     partes = [
-        usuario.nombre,
         usuario.apellido_paterno,
-        usuario.apellido_materno
+        usuario.apellido_materno,
+        usuario.nombre
     ]
 
     return " ".join(parte for parte in partes if parte)
@@ -286,7 +286,13 @@ def _build_captura_response(db: Session, grupo_materia_id: int):
             .joinedload(Alumno.usuario)
         )
         .filter(CargaAcademica.id_grupo_materia == grupo_materia_id)
-        .order_by(CargaAcademica.id_alumno)
+        .join(CargaAcademica.alumno)
+        .join(Alumno.usuario)
+        .order_by(
+            Usuario.apellido_paterno,
+            Usuario.apellido_materno,
+            Usuario.nombre
+        )
         .all()
     )
 

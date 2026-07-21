@@ -54,16 +54,40 @@ class AlumnoPlanDetalle(BaseModel):
     nombre_plan: Optional[str] = None
 
 
+class AlumnoGrupoDetalle(BaseModel):
+    id_grupo: int
+    nombre: Optional[str] = None
+    turno: Optional[str] = None
+    id_carrera: Optional[int] = None
+
+
 class AlumnoDetalleResponse(BaseModel):
     id_alumno: int
     matricula: Optional[str] = None
     numero_control: Optional[str] = None
+    id_usuario: Optional[int] = None
     nombre: Optional[str] = None
+    nombres: Optional[str] = None
+    apellido_paterno: Optional[str] = None
+    apellido_materno: Optional[str] = None
     estatus: Optional[str] = None
     id_carrera: Optional[int] = None
     id_plan: Optional[int] = None
+    fecha_nacimiento: Optional[date] = None
+    ciudad_nacimiento: Optional[str] = None
+    municipio_nacimiento: Optional[str] = None
+    nacionalidad: Optional[str] = None
+    sexo: Optional[str] = None
+    curp: Optional[str] = None
+    direccion: Optional[str] = None
+    ciudad: Optional[str] = None
+    estado: Optional[str] = None
+    correo_contacto: Optional[str] = None
+    fecha_ingreso: Optional[date] = None
+    foto: Optional[str] = None
     carrera: Optional[AlumnoCarreraDetalle] = None
     plan: Optional[AlumnoPlanDetalle] = None
+    grupo: Optional[AlumnoGrupoDetalle] = None
 
     class Config:
         from_attributes = True

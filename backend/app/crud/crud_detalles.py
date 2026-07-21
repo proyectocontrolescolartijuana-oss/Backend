@@ -29,9 +29,9 @@ def _nombre_usuario(usuario):
         return None
 
     partes = [
-        usuario.nombre,
         usuario.apellido_paterno,
-        usuario.apellido_materno
+        usuario.apellido_materno,
+        usuario.nombre
     ]
 
     return " ".join(parte for parte in partes if parte)

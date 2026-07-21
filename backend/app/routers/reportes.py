@@ -7,11 +7,16 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.security import get_current_user
 from app.database import get_db
 from app.models.alumno import Alumno
+from app.models.asistencia import Asistencia
+from app.models.calificacion import Calificacion
 from app.models.carrera import Carrera
+from app.models.carga_academica import CargaAcademica
 from app.models.docente import Docente
 from app.models.grupo import Grupo
+from app.models.grupo_materia import GrupoMateria
 from app.models.inscripcion import Inscripcion
 from app.models.materia import Materia
+from app.models.parcial import Parcial
 from app.models.periodo import Periodo
 from app.models.plan_estudio import PlanEstudio
 from app.models.recepcion_documento import RecepcionDocumento
@@ -37,12 +42,37 @@ def _nombre_usuario(usuario: Usuario | None) -> str:
     return " ".join(
         parte
         for parte in [
-            usuario.nombre,
             usuario.apellido_paterno,
-            usuario.apellido_materno
+            usuario.apellido_materno,
+            usuario.nombre
         ]
         if parte
     )
+
+
+def _nombre_usuario_apellidos_primero(usuario: Usuario | None) -> str:
+    if not usuario:
+        return ""
+
+    return " ".join(
+        parte
+        for parte in [
+            usuario.apellido_paterno,
+            usuario.apellido_materno,
+            usuario.nombre
+        ]
+        if parte
+    )
+
+
+def _logo_carrera_url(logo: str | None) -> str | None:
+    if not logo:
+        return None
+
+    if logo.startswith(("http://", "https://", "/static/")):
+        return logo
+
+    return f"http://localhost:8000/static/logos/{logo}"
 
 
 def _si_no(value) -> str:
@@ -524,6 +554,429 @@ def _recepciones_por_alumno(db: Session, alumno_ids: list[int]) -> dict[int, Rec
     return resultado
 
 
+def _to_float(value) -> float | None:
+    if value is None:
+        return None
+
+    return float(value)
+
+
+def _promedio_valores(valores: list[float | None]) -> float | None:
+    validos = [
+        valor
+        for valor in valores
+        if valor is not None
+    ]
+
+    if not validos:
+        return None
+
+    return round(sum(validos) / len(validos), 2)
+
+
+def _calcular_final_concentrado(
+    calificaciones_por_parcial: dict[int, float | None],
+    parciales: list[Parcial]
+) -> float | None:
+    total = 0
+    peso_total = 0
+    valores = []
+
+    for parcial in parciales:
+        calificacion = calificaciones_por_parcial.get(parcial.id_parcial)
+
+        if calificacion is None:
+            continue
+
+        valores.append(calificacion)
+        peso = _to_float(parcial.porcentaje) or 0
+        total += calificacion * peso
+        peso_total += peso
+
+    if peso_total > 0:
+        return round(total / peso_total, 2)
+
+    return _promedio_valores(valores)
+
+
+def _porcentaje_asistencia(asistencias: int, clases: int) -> float | None:
+    if not clases:
+        return None
+
+    return round((asistencias / clases) * 100, 2)
+
+
+def _formato_calificacion(value) -> float | int | None:
+    if value is None:
+        return None
+
+    value = round(float(value), 2)
+
+    if value.is_integer():
+        return int(value)
+
+    return value
+
+
+def _build_concentrado_materia(
+    db: Session,
+    grupo_materia: GrupoMateria,
+    parciales: list[Parcial]
+) -> dict:
+    cargas = (
+        db.query(CargaAcademica)
+        .join(CargaAcademica.alumno)
+        .join(Alumno.usuario)
+        .options(
+            joinedload(CargaAcademica.alumno)
+            .joinedload(Alumno.usuario)
+        )
+        .filter(
+            CargaAcademica.id_grupo_materia == grupo_materia.id_grupo_materia,
+            CargaAcademica.estatus != "BAJA"
+        )
+        .order_by(
+            Usuario.apellido_paterno,
+            Usuario.apellido_materno,
+            Usuario.nombre
+        )
+        .all()
+    )
+
+    cargas_ids = [carga.id_carga for carga in cargas]
+    calificaciones = []
+    asistencias = []
+
+    if cargas_ids:
+        calificaciones = (
+            db.query(Calificacion)
+            .filter(Calificacion.id_carga.in_(cargas_ids))
+            .all()
+        )
+        asistencias = (
+            db.query(Asistencia)
+            .filter(Asistencia.id_carga.in_(cargas_ids))
+            .all()
+        )
+
+    calificaciones_por_carga = {}
+
+    for calificacion in calificaciones:
+        calificaciones_por_carga.setdefault(
+            calificacion.id_carga,
+            {}
+        )[calificacion.id_parcial] = _to_float(calificacion.calificacion)
+
+    fechas_por_parcial = {
+        parcial.id_parcial: set()
+        for parcial in parciales
+    }
+    asistencias_por_carga = {}
+
+    for asistencia in asistencias:
+        if asistencia.id_parcial in fechas_por_parcial and asistencia.fecha:
+            fechas_por_parcial[asistencia.id_parcial].add(asistencia.fecha)
+
+        if asistencia.asistencia:
+            conteo = asistencias_por_carga.setdefault(asistencia.id_carga, {})
+            conteo[asistencia.id_parcial] = (
+                conteo.get(asistencia.id_parcial, 0) + 1
+            )
+
+    clases_por_parcial = {
+        parcial.id_parcial: len(fechas_por_parcial[parcial.id_parcial])
+        for parcial in parciales
+    }
+    total_clases = sum(clases_por_parcial.values())
+    alumnos = []
+
+    for index, carga in enumerate(cargas, start=1):
+        calificaciones_carga = calificaciones_por_carga.get(
+            carga.id_carga,
+            {}
+        )
+        asistencias_carga = asistencias_por_carga.get(carga.id_carga, {})
+        calificaciones_parciales = [
+            calificaciones_carga.get(parcial.id_parcial)
+            for parcial in parciales
+        ]
+        asistencias_parciales = []
+
+        for parcial in parciales:
+            clases = clases_por_parcial.get(parcial.id_parcial, 0)
+            total_asistencias = asistencias_carga.get(parcial.id_parcial, 0)
+
+            asistencias_parciales.append({
+                "id_parcial": parcial.id_parcial,
+                "asistencias": total_asistencias,
+                "clases": clases,
+                "porcentaje": _porcentaje_asistencia(
+                    total_asistencias,
+                    clases
+                )
+            })
+
+        total_asistencias = sum(
+            asistencia["asistencias"]
+            for asistencia in asistencias_parciales
+        )
+
+        alumnos.append({
+            "no": index,
+            "id_alumno": carga.alumno.id_alumno if carga.alumno else None,
+            "nombre": (
+                _nombre_usuario_apellidos_primero(carga.alumno.usuario).upper()
+                if carga.alumno and carga.alumno.usuario else ""
+            ),
+            "calificaciones": [
+                _formato_calificacion(calificacion)
+                for calificacion in calificaciones_parciales
+            ],
+            "promedio_primeros_parciales": _formato_calificacion(
+                _promedio_valores(calificaciones_parciales[:2])
+            ),
+            "promedio_final": _formato_calificacion(
+                _calcular_final_concentrado(calificaciones_carga, parciales)
+            ),
+            "asistencias": asistencias_parciales,
+            "asistencia_final": {
+                "asistencias": total_asistencias,
+                "clases": total_clases,
+                "porcentaje": _porcentaje_asistencia(
+                    total_asistencias,
+                    total_clases
+                )
+            }
+        })
+
+    return {
+        "id_grupo_materia": grupo_materia.id_grupo_materia,
+        "materia": {
+            "id_materia": grupo_materia.materia.id_materia,
+            "nombre": grupo_materia.materia.nombre,
+            "clave": grupo_materia.materia.clave
+        } if grupo_materia.materia else None,
+        "docente": (
+            _nombre_usuario(grupo_materia.docente.usuario)
+            if grupo_materia.docente and grupo_materia.docente.usuario
+            else ""
+        ),
+        "clases_dadas": [
+            clases_por_parcial.get(parcial.id_parcial, 0)
+            for parcial in parciales
+        ],
+        "total_clases": total_clases,
+        "alumnos": alumnos
+    }
+
+
+def _get_periodo_reporte(
+    db: Session,
+    periodo_id: int | None
+) -> Periodo | None:
+    periodo_query = db.query(Periodo)
+
+    if periodo_id is not None:
+        return (
+            periodo_query
+            .filter(Periodo.id_periodo == periodo_id)
+            .first()
+        )
+
+    return (
+        periodo_query
+        .filter(Periodo.estado == "ACTIVO")
+        .order_by(Periodo.fecha_inicio.desc())
+        .first()
+    )
+
+
+def _get_concentrado_calificaciones_data(
+    db: Session,
+    grupo_id: int,
+    periodo_id: int | None = None,
+    carrera_id: int | None = None
+) -> dict:
+    grupo = (
+        db.query(Grupo)
+        .options(
+            joinedload(Grupo.carrera),
+            joinedload(Grupo.cuatrimestre)
+        )
+        .filter(Grupo.id_grupo == grupo_id)
+        .first()
+    )
+
+    if not grupo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Grupo no encontrado"
+        )
+
+    if carrera_id is not None and grupo.id_carrera != carrera_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El grupo no pertenece a la carrera seleccionada"
+        )
+
+    periodo = _get_periodo_reporte(db, periodo_id)
+
+    if not periodo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Periodo no encontrado"
+        )
+
+    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
+
+    if not parciales:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay parciales registrados"
+        )
+
+    grupos_materias = (
+        db.query(GrupoMateria)
+        .options(
+            joinedload(GrupoMateria.materia),
+            joinedload(GrupoMateria.docente).joinedload(Docente.usuario)
+        )
+        .filter(
+            GrupoMateria.id_grupo == grupo_id,
+            GrupoMateria.id_periodo == periodo.id_periodo
+        )
+        .order_by(GrupoMateria.id_grupo_materia)
+        .all()
+    )
+
+    return {
+        "titulo": "Concentrado de Calificaciones",
+        "grupo": {
+            "id_grupo": grupo.id_grupo,
+            "nombre": grupo.nombre,
+            "turno": grupo.turno,
+            "carrera": {
+                "id_carrera": grupo.carrera.id_carrera,
+                "nombre": grupo.carrera.nombre,
+                "clave": grupo.carrera.clave,
+                "rvoe": grupo.carrera.rvoe,
+                "logo": _logo_carrera_url(grupo.carrera.logo)
+            } if grupo.carrera else None,
+            "cuatrimestre": {
+                "id_cuatrimestre": grupo.cuatrimestre.id_cuatrimestre,
+                "numero": grupo.cuatrimestre.numero,
+                "nombre": grupo.cuatrimestre.nombre
+            } if grupo.cuatrimestre else None
+        },
+        "periodo": {
+            "id_periodo": periodo.id_periodo,
+            "nombre": periodo.nombre,
+            "fecha_inicio": periodo.fecha_inicio,
+            "fecha_fin": periodo.fecha_fin,
+            "estado": periodo.estado
+        },
+        "parciales": [
+            {
+                "id_parcial": parcial.id_parcial,
+                "nombre": parcial.nombre,
+                "porcentaje": _to_float(parcial.porcentaje)
+            }
+            for parcial in parciales
+        ],
+        "materias": [
+            _build_concentrado_materia(db, grupo_materia, parciales)
+            for grupo_materia in grupos_materias
+        ]
+    }
+
+
+def _sheet_concentrado_materia(
+    materia_reporte: dict,
+    concentrado: dict
+) -> dict:
+    parciales = concentrado["parciales"]
+    materia = materia_reporte.get("materia") or {}
+    columns = [
+        {"key": "no", "header": "No."},
+        {"key": "nombre", "header": "Nombre del alumno"},
+    ]
+
+    for index, parcial in enumerate(parciales, start=1):
+        label = (parcial.get("nombre") or f"Parcial {index}").upper()
+        columns.append({
+            "key": f"calificacion_{index}",
+            "header": label
+        })
+
+    columns.extend([
+        {
+            "key": "promedio_primeros_parciales",
+            "header": "Promedio 1er y 2do parcial"
+        },
+        {"key": "promedio_final", "header": "Promedio"},
+    ])
+
+    for index, parcial in enumerate(parciales, start=1):
+        label = (parcial.get("nombre") or f"Parcial {index}").upper()
+        columns.extend([
+            {
+                "key": f"asistencias_{index}",
+                "header": f"Asistencias {label}"
+            },
+            {
+                "key": f"asistencia_porcentaje_{index}",
+                "header": f"% asistencia {label}"
+            },
+        ])
+
+    columns.extend([
+        {"key": "asistencias_final", "header": "Asistencias final"},
+        {
+            "key": "asistencia_porcentaje_final",
+            "header": "% asistencia final"
+        },
+    ])
+
+    rows = []
+
+    for alumno in materia_reporte["alumnos"]:
+        row = {
+            "no": alumno["no"],
+            "nombre": alumno["nombre"],
+            "promedio_primeros_parciales": (
+                alumno["promedio_primeros_parciales"]
+            ),
+            "promedio_final": alumno["promedio_final"],
+            "asistencias_final": (
+                alumno["asistencia_final"]["asistencias"]
+            ),
+            "asistencia_porcentaje_final": (
+                alumno["asistencia_final"]["porcentaje"]
+            ),
+        }
+
+        for index, calificacion in enumerate(
+            alumno["calificaciones"],
+            start=1
+        ):
+            row[f"calificacion_{index}"] = calificacion
+
+        for index, asistencia in enumerate(
+            alumno["asistencias"],
+            start=1
+        ):
+            row[f"asistencias_{index}"] = asistencia["asistencias"]
+            row[f"asistencia_porcentaje_{index}"] = asistencia["porcentaje"]
+
+        rows.append(row)
+
+    return {
+        "name": (materia.get("nombre") or "Materia")[:31],
+        "columns": columns,
+        "rows": rows
+    }
+
+
 @router.get("/reinscripcion-alumnos")
 def obtener_reporte_reinscripcion_alumnos(
     grupo_id: int,
@@ -692,6 +1145,65 @@ def obtener_reporte_reinscripcion_alumnos(
             "total_paginas": 1
         }
     }
+
+
+@router.get("/concentrado-calificaciones")
+def obtener_concentrado_calificaciones(
+    grupo_id: int,
+    periodo_id: int | None = None,
+    carrera_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(_require_reportes_role)
+):
+    return _get_concentrado_calificaciones_data(
+        db,
+        grupo_id,
+        periodo_id,
+        carrera_id
+    )
+
+
+@router.get("/concentrado-calificaciones/excel")
+def exportar_concentrado_calificaciones(
+    grupo_id: int,
+    periodo_id: int | None = None,
+    carrera_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(_require_reportes_role)
+):
+    concentrado = _get_concentrado_calificaciones_data(
+        db,
+        grupo_id,
+        periodo_id,
+        carrera_id
+    )
+    sheets = [
+        _sheet_concentrado_materia(materia, concentrado)
+        for materia in concentrado["materias"]
+    ]
+
+    if not sheets:
+        sheets = [{
+            "name": "Concentrado",
+            "columns": [
+                {"key": "mensaje", "header": "Mensaje"}
+            ],
+            "rows": [{
+                "mensaje": "El grupo no tiene materias asignadas en el periodo"
+            }]
+        }]
+
+    content = build_xlsx(
+        sheets,
+        title="Concentrado de calificaciones"
+    )
+    grupo_nombre = (concentrado["grupo"]["nombre"] or "grupo").lower()
+    filename = (
+        "concentrado_calificaciones_"
+        f"{grupo_nombre.replace(' ', '_')}.xlsx"
+    )
+
+    return _excel_response(content, filename)
 
 
 @router.get("")

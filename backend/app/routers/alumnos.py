@@ -25,6 +25,8 @@ from app.crud.crud_alumno import (
 
 from app.database import get_db
 from app.models.alumno import Alumno
+from app.models.inscripcion import Inscripcion
+from app.models.usuario import Usuario
 
 router = APIRouter(
     prefix="/alumnos",
@@ -45,15 +47,61 @@ def _nombre_usuario(usuario):
     return " ".join(parte for parte in partes if parte)
 
 
-def _alumno_detalle(alumno):
+def _grupo_detalle(grupo):
+    if not grupo:
+        return None
+
+    return {
+        "id_grupo": grupo.id_grupo,
+        "nombre": grupo.nombre,
+        "turno": grupo.turno,
+        "id_carrera": grupo.id_carrera
+    }
+
+
+def _grupo_actual(db, alumno_id):
+    inscripcion = (
+        db.query(Inscripcion)
+        .filter(Inscripcion.id_alumno == alumno_id)
+        .order_by(
+            Inscripcion.fecha_inscripcion.desc(),
+            Inscripcion.id_inscripcion.desc()
+        )
+        .first()
+    )
+
+    return inscripcion.grupo if inscripcion else None
+
+
+def _alumno_detalle(alumno, db=None):
     return {
         "id_alumno": alumno.id_alumno,
         "matricula": alumno.matricula,
         "numero_control": alumno.numero_control,
+        "id_usuario": alumno.id_usuario,
         "nombre": _nombre_usuario(alumno.usuario),
+        "nombres": alumno.usuario.nombre if alumno.usuario else None,
+        "apellido_paterno": (
+            alumno.usuario.apellido_paterno if alumno.usuario else None
+        ),
+        "apellido_materno": (
+            alumno.usuario.apellido_materno if alumno.usuario else None
+        ),
         "estatus": alumno.estatus,
         "id_carrera": alumno.id_carrera,
         "id_plan": alumno.id_plan,
+        "fecha_nacimiento": alumno.fecha_nacimiento,
+        "ciudad_nacimiento": alumno.ciudad_nacimiento,
+        "municipio_nacimiento": alumno.municipio_nacimiento,
+        "nacionalidad": alumno.nacionalidad,
+        "sexo": alumno.sexo,
+        "curp": alumno.curp,
+        "direccion": alumno.direccion,
+        "ciudad": alumno.ciudad,
+        "estado": alumno.estado,
+        "correo_contacto": alumno.correo_contacto,
+        "fecha_ingreso": alumno.fecha_ingreso,
+        "foto": alumno.foto,
         "carrera": {
             "id_carrera": alumno.carrera.id_carrera,
             "clave": alumno.carrera.clave,
@@ -63,7 +111,8 @@ def _alumno_detalle(alumno):
         "plan": {
             "id_plan": alumno.plan.id_plan,
             "nombre_plan": alumno.plan.nombre_plan
-        } if alumno.plan else None
+        } if alumno.plan else None,
+        "grupo": _grupo_detalle(_grupo_actual(db, alumno.id_alumno)) if db else None
     }
 
 
@@ -88,16 +137,21 @@ def listar_alumnos_detalle(
 ):
     alumnos = (
         db.query(Alumno)
+        .join(Alumno.usuario)
         .options(
             joinedload(Alumno.usuario),
             joinedload(Alumno.carrera),
             joinedload(Alumno.plan)
         )
-        .order_by(Alumno.id_alumno.desc())
+        .order_by(
+            Usuario.apellido_paterno,
+            Usuario.apellido_materno,
+            Usuario.nombre
+        )
         .all()
     )
 
-    return [_alumno_detalle(alumno) for alumno in alumnos]
+    return [_alumno_detalle(alumno, db) for alumno in alumnos]
 
 
 @router.get("/siguiente-matricula")
@@ -113,6 +167,34 @@ def obtener_siguiente_matricula(
             status_code=400,
             detail=str(error)
         ) from error
+
+
+@router.get(
+    "/{alumno_id}/detalle",
+    response_model=AlumnoDetalleResponse
+)
+def obtener_alumno_detalle(
+    alumno_id: int,
+    db: Session = Depends(get_db)
+):
+    alumno = (
+        db.query(Alumno)
+        .options(
+            joinedload(Alumno.usuario),
+            joinedload(Alumno.carrera),
+            joinedload(Alumno.plan)
+        )
+        .filter(Alumno.id_alumno == alumno_id)
+        .first()
+    )
+
+    if not alumno:
+        raise HTTPException(
+            status_code=404,
+            detail="Alumno no encontrado"
+        )
+
+    return _alumno_detalle(alumno)
 
 
 @router.get(

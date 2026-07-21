@@ -57,6 +57,7 @@ def buscar_alumnos_kardex(db: Session, query: str, limit: int = 8):
         .filter(
             or_(
                 func.lower(Alumno.matricula).like(like),
+                func.lower(func.coalesce(Alumno.numero_control, "")).like(like),
                 nombre_completo.like(like),
             )
         )
@@ -69,6 +70,7 @@ def buscar_alumnos_kardex(db: Session, query: str, limit: int = 8):
         {
             "id_alumno": alumno.id_alumno,
             "matricula": alumno.matricula or "",
+            "numero_control": alumno.numero_control or "",
             "nombre": _nombre_completo(alumno.usuario),
             "carrera": alumno.carrera.nombre if alumno.carrera else "",
         }
@@ -233,10 +235,13 @@ def get_kardex_by_matricula(db: Session, matricula: str):
 
     return {
         "matricula": alumno.matricula or "",
+        "numero_control": alumno.numero_control or "",
+        "curp": alumno.curp or "",
         "primer_apellido": primer_apellido,
         "segundo_apellido": segundo_apellido,
         "nombre": getattr(usuario, "nombre", "") if usuario else "",
         "carrera": alumno.carrera.nombre if alumno.carrera else "",
+        "rvoe": alumno.carrera.rvoe if alumno.carrera else "",
         "logo": alumno.carrera.logo if alumno.carrera else None,
         "plan_estudios": (
             alumno.plan.nombre_plan
@@ -275,7 +280,12 @@ def get_kardex_by_query(db: Session, query: str):
         alumno = (
             db.query(Alumno)
             .join(Alumno.usuario)
-            .filter(nombre_completo.like(like))
+            .filter(
+                or_(
+                    func.lower(func.coalesce(Alumno.numero_control, "")).like(like),
+                    nombre_completo.like(like),
+                )
+            )
             .order_by(Alumno.matricula.asc())
             .first()
         )

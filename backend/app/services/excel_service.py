@@ -93,14 +93,29 @@ def _cell_xml(reference: str, value, style: int | None = None) -> str:
     )
 
 
-def _column_widths(headers: list[str], rows: list[dict]) -> str:
+def _column_widths(columns: list[dict], rows: list[dict]) -> str:
     columns = []
 
-    for index, header in enumerate(headers, start=1):
+    for index, column in enumerate(columns, start=1):
+        header = column["header"]
+        width_override = column.get("width")
+
+        if width_override is not None:
+            columns.append(
+                f'<col min="{index}" max="{index}" width="{width_override}" '
+                'customWidth="1"/>'
+            )
+            continue
+
         max_length = len(str(header))
 
         for row in rows:
-            value = _format_value(row.get(header))
+            cell = row.get(column["key"])
+
+            if isinstance(cell, dict):
+                value = _format_value(cell.get("value", cell.get("v")))
+            else:
+                value = _format_value(cell)
 
             if value is not None:
                 max_length = max(max_length, len(str(value)))
@@ -111,6 +126,13 @@ def _column_widths(headers: list[str], rows: list[dict]) -> str:
         )
 
     return "<cols>" + "".join(columns) + "</cols>" if columns else ""
+
+
+def _cell_payload(cell):
+    if isinstance(cell, dict):
+        return cell.get("value", cell.get("v")), cell.get("style")
+
+    return cell, None
 
 
 def _worksheet_xml(columns: list[dict], rows: list[dict]) -> str:
@@ -131,9 +153,9 @@ def _worksheet_xml(columns: list[dict], rows: list[dict]) -> str:
         _cell_xml(
             f"{_column_letter(index)}1",
             header,
-            style=1
+            style=column.get("header_style", column.get("style", 1))
         )
-        for index, header in enumerate(headers, start=1)
+        for index, (header, column) in enumerate(zip(headers, columns), start=1)
     ]
     xml_rows.append(f'<row r="1">{"".join(header_cells)}</row>')
 
@@ -141,7 +163,9 @@ def _worksheet_xml(columns: list[dict], rows: list[dict]) -> str:
         cells = [
             _cell_xml(
                 f"{_column_letter(column_index)}{row_index}",
-                row.get(header)
+                _cell_payload(row.get(header))[0],
+                style=_cell_payload(row.get(header))[1]
+                or columns[column_index - 1].get("style")
             )
             for column_index, header in enumerate(headers, start=1)
         ]
@@ -240,16 +264,60 @@ def _styles_xml() -> str:
     <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
     <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font>
   </fonts>
-  <fills count="3">
+  <fills count="8">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF0B245B"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF9DC3E6"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF4A6B8"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF2A8"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8CBAD"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEDEDED"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FF000000"/></left>
+      <right style="thin"><color rgb="FF000000"/></right>
+      <top style="thin"><color rgb="FF000000"/></top>
+      <bottom style="thin"><color rgb="FF000000"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="2">
+  <cellXfs count="12">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="center" vertical="center" wrapText="1"/>
+    </xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1">
+      <alignment horizontal="left" vertical="center" wrapText="1"/>
+    </xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>'''
