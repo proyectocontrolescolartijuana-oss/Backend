@@ -2,6 +2,8 @@ from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import date
 
+from app.utils.logo_url import construir_url_logo
+
 class CarreraBase(BaseModel):
     clave: str
     rvoe: Optional[str] = None
@@ -30,12 +32,8 @@ class CarreraResponse(CarreraBase):
     
     @field_validator("logo")
     @classmethod
-    def construir_url_logo(cls, valor: Optional[str]) -> Optional[str]:
-        if not valor:
-            return None
-        if valor.startswith(("http://", "https://", "/static/")):
-            return valor
-        return f"http://localhost:8000/static/logos/{valor}"
+    def construir_url_logo_carrera(cls, valor: Optional[str]) -> Optional[str]:
+        return construir_url_logo(valor)
 
     class Config:
         from_attributes = True
@@ -47,6 +45,11 @@ class CarreraSimple(BaseModel):
     nombre: str
     fecha_autorizacion: Optional[date] = None
     logo: Optional[str] = None
+
+    @field_validator("logo")
+    @classmethod
+    def construir_url_logo_carrera(cls, valor: Optional[str]) -> Optional[str]:
+        return construir_url_logo(valor)
 
     class Config:
         from_attributes = True

@@ -3,6 +3,8 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
+from app.utils.logo_url import construir_url_logo
+
 
 class UsuarioNombre(BaseModel):
     id_usuario: int
@@ -63,10 +65,8 @@ class CarreraDetalle(BaseModel):
     
     @field_validator("logo")
     @classmethod
-    def construir_url_logo(cls, valor: Optional[str]) -> Optional[str]:
-        if not valor:
-            return None
-        return f"http://localhost:8000/static/logos/{valor}"
+    def construir_url_logo_carrera(cls, valor: Optional[str]) -> Optional[str]:
+        return construir_url_logo(valor)
 
 
 class EmpresaDetalle(BaseModel):

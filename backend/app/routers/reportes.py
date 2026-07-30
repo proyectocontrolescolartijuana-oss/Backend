@@ -22,6 +22,7 @@ from app.models.plan_estudio import PlanEstudio
 from app.models.recepcion_documento import RecepcionDocumento
 from app.models.usuario import Usuario
 from app.services.excel_service import build_xlsx
+from app.utils.logo_url import construir_url_logo
 
 
 ALLOWED_ROLES = {"ADMIN", "CONTROL_ESCOLAR"}
@@ -66,13 +67,7 @@ def _nombre_usuario_apellidos_primero(usuario: Usuario | None) -> str:
 
 
 def _logo_carrera_url(logo: str | None) -> str | None:
-    if not logo:
-        return None
-
-    if logo.startswith(("http://", "https://", "/static/")):
-        return logo
-
-    return f"http://localhost:8000/static/logos/{logo}"
+    return construir_url_logo(logo)
 
 
 def _si_no(value) -> str:

@@ -5,8 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.models.carrera import Carrera
 from app.schemas.carrera import CarreraCreate
+from app.services.blob_service import BlobStorageError, delete_blob
 
 LOGOS_DIR = Path(__file__).resolve().parents[1] / "static" / "logos"
+BLOB_LOGOS_PREFIX = "logos-carreras/"
 
 
 def _nombre_logo_local(logo: str | None):
@@ -25,6 +27,20 @@ def _nombre_logo_local(logo: str | None):
     return Path(logo).name
 
 
+def _es_logo_blob(logo: str | None):
+    if not logo:
+        return False
+
+    if logo.startswith("/carreras/logos/"):
+        logo = logo.removeprefix("/carreras/logos/")
+
+    return logo.startswith(BLOB_LOGOS_PREFIX)
+
+
+def _blob_key_logo(logo: str):
+    return logo.removeprefix("/carreras/logos/")
+
+
 def _logo_en_uso(db: Session, logo: str, excluir_carrera_id: int | None = None):
     query = db.query(Carrera.id_carrera).filter(Carrera.logo == logo)
 
@@ -39,12 +55,22 @@ def _eliminar_logo_si_no_esta_en_uso(
     logo: str | None,
     excluir_carrera_id: int | None = None
 ):
-    nombre_logo = _nombre_logo_local(logo)
-
-    if not nombre_logo:
+    if not logo:
         return
 
     if _logo_en_uso(db, logo, excluir_carrera_id):
+        return
+
+    if _es_logo_blob(logo):
+        try:
+            delete_blob(_blob_key_logo(logo))
+        except BlobStorageError:
+            pass
+        return
+
+    nombre_logo = _nombre_logo_local(logo)
+
+    if not nombre_logo:
         return
 
     archivo = (LOGOS_DIR / nombre_logo).resolve()

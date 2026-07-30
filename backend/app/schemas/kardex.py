@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 
+from app.utils.logo_url import construir_url_logo
+
 
 class KardexMateria(BaseModel):
     clave: str = ""
@@ -31,10 +33,8 @@ class KardexResponse(BaseModel):
     
     @field_validator("logo")
     @classmethod
-    def contruir_url_logo(cls, valor: Optional[str]) -> Optional[str]:
-        if not valor:
-            return None
-        return f"http://localhost:8000/static/logos/{valor}"
+    def construir_url_logo_carrera(cls, valor: Optional[str]) -> Optional[str]:
+        return construir_url_logo(valor)
     
     
 

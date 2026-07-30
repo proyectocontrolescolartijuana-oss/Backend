@@ -1,10 +1,16 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.blob_service import (
+    BlobStorageError,
+    download_blob,
+    upload_blob
+)
 
 from app.schemas.carrera import (
     CarreraCreate,
@@ -27,6 +33,7 @@ router = APIRouter(
 
 LOGOS_DIR = Path(__file__).resolve().parents[1] / "static" / "logos"
 EXTENSIONES_LOGO_PERMITIDAS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
+BLOB_OBJECT_PREFIX = "logos-carreras"
 
 
 def _validar_archivo_logo(archivo: UploadFile):
@@ -48,31 +55,72 @@ def _validar_archivo_logo(archivo: UploadFile):
     return extension
 
 
+def _build_blob_key(extension: str) -> str:
+    return f"{BLOB_OBJECT_PREFIX}/{uuid4().hex}{extension}"
+
+
+def _build_static_logo_response(nombre_logo: str):
+    archivo = (LOGOS_DIR / Path(nombre_logo).name).resolve()
+
+    try:
+        archivo.relative_to(LOGOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail="Ruta de logo no valida"
+        )
+
+    if not archivo.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Logo no encontrado"
+        )
+
+    return FileResponse(path=archivo, media_type=None)
+
+
 @router.post("/logos")
 def subir_logo_carrera(
     archivo: UploadFile = File(...)
 ):
     extension = _validar_archivo_logo(archivo)
-    LOGOS_DIR.mkdir(parents=True, exist_ok=True)
-
-    nombre_archivo = f"carrera_{uuid4().hex}{extension}"
-    destino = (LOGOS_DIR / nombre_archivo).resolve()
+    object_key = _build_blob_key(extension)
 
     try:
-        destino.relative_to(LOGOS_DIR.resolve())
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Nombre de archivo invalido"
+        upload_blob(
+            object_key,
+            archivo.file.read(),
+            archivo.content_type
         )
-
-    with destino.open("wb") as salida:
-        salida.write(archivo.file.read())
+    except BlobStorageError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc)
+        ) from exc
 
     return {
-        "logo": nombre_archivo,
-        "url": f"http://localhost:8000/static/logos/{nombre_archivo}"
+        "logo": object_key,
+        "url": f"/carreras/logos/{object_key}"
     }
+
+
+@router.get("/logos/{logo_path:path}")
+def descargar_logo_carrera(logo_path: str):
+    if not logo_path.startswith(f"{BLOB_OBJECT_PREFIX}/"):
+        return _build_static_logo_response(logo_path)
+
+    try:
+        content, content_type = download_blob(logo_path)
+    except BlobStorageError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc)
+        ) from exc
+
+    return Response(
+        content,
+        media_type=content_type or "application/octet-stream",
+    )
 
 @router.get(
     "/",
