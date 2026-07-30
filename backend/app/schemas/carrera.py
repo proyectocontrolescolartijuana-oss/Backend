@@ -33,6 +33,8 @@ class CarreraResponse(CarreraBase):
     def construir_url_logo(cls, valor: Optional[str]) -> Optional[str]:
         if not valor:
             return None
+        if valor.startswith(("http://", "https://", "/static/")):
+            return valor
         return f"http://localhost:8000/static/logos/{valor}"
 
     class Config:

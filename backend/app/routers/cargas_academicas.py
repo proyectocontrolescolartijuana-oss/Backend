@@ -282,6 +282,45 @@ def _validar_carga_academica(
             )
         )
 
+    materia_aprobada_previamente = (
+        db.query(HistorialAcademico.id_historial)
+        .filter(
+            HistorialAcademico.id_alumno == alumno_id,
+            HistorialAcademico.id_materia == grupo_materia.id_materia,
+            HistorialAcademico.resultado == "APROBADO"
+        )
+        .first()
+    )
+
+    if materia_aprobada_previamente:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El alumno ya tiene aprobada esta materia y no puede "
+                "inscribirse de nuevo"
+            )
+        )
+
+    carga_aprobada_previamente = (
+        db.query(CargaAcademica.id_carga)
+        .join(CargaAcademica.grupo_materia)
+        .filter(
+            CargaAcademica.id_alumno == alumno_id,
+            GrupoMateria.id_materia == grupo_materia.id_materia,
+            CargaAcademica.estatus == "APROBADA"
+        )
+        .first()
+    )
+
+    if carga_aprobada_previamente:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "El alumno ya tiene aprobada esta materia y no puede "
+                "inscribirse de nuevo"
+            )
+        )
+
     _validar_cupo(db, grupo_materia, carga_id_actual)
 
     try:

@@ -8,11 +8,13 @@ from app.crud.crud_historial_academico import (
     create_historial_academico,
     delete_historial_academico,
     get_historial_academico,
+    registrar_equivalencias,
     update_historial_academico
 )
 from app.database import get_db
 from app.schemas.detalles import HistorialAcademicoDetalleResponse
 from app.schemas.historial_academico import (
+    EquivalenciasCreate,
     HistorialAcademicoCreate,
     HistorialAcademicoUpdate
 )
@@ -72,6 +74,35 @@ def obtener_historial_academico(
         )
 
     return historial
+
+
+@router.post(
+    "/alumnos/{alumno_id}/equivalencias",
+    response_model=list[HistorialAcademicoDetalleResponse]
+)
+def registrar_equivalencias_alumno(
+    alumno_id: int,
+    equivalencias: EquivalenciasCreate,
+    db: Session = Depends(get_db)
+):
+    try:
+        registros = registrar_equivalencias(db, alumno_id, equivalencias)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        ) from error
+
+    ids_registros = {
+        registro.id_historial
+        for registro in registros
+    }
+
+    return [
+        item
+        for item in get_historiales_academicos_detalle(db, alumno_id=alumno_id)
+        if item["id_historial"] in ids_registros
+    ]
 
 
 @router.post(

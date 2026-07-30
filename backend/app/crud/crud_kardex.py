@@ -149,13 +149,23 @@ def get_kardex_by_matricula(db: Session, matricula: str):
 
         historial_lookup[
             (h.id_materia, h.id_periodo)
-        ] = float(h.calificacion_final)
+        ] = {
+            "calificacion_final": float(h.calificacion_final),
+            "tipo_acreditacion": (
+                "EQ"
+                if h.tipo_evaluacion == "EQUIVALENCIA"
+                else "OR"
+            ),
+        }
 
     plan_materias = (
         db.query(PlanMateria)
+        .options(
+            joinedload(PlanMateria.materia),
+            joinedload(PlanMateria.cuatrimestre),
+        )
         .filter(
             PlanMateria.id_plan == alumno.id_plan,
-            PlanMateria.id_materia.in_(ids_materias) if ids_materias else False,
         )
         .all()
     )
@@ -164,6 +174,11 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         for pm in plan_materias
         if pm.cuatrimestre
     }
+    plan_materia_por_id = {
+        pm.id_materia: pm
+        for pm in plan_materias
+    }
+    materias_con_carga = set()
 
     for carga in cargas:
         gm = carga.grupo_materia
@@ -180,6 +195,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         if not gm.periodo:
             continue
 
+        materias_con_carga.add((gm.id_materia, gm.id_periodo))
         cuatrimestre_num = cuatrimestre_por_materia.get(gm.id_materia, 0)
 
         if not cuatrimestre_num and gm.grupo.cuatrimestre:
@@ -188,9 +204,12 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         periodo_escolar = gm.periodo.nombre or ""
         grupo_nombre = gm.grupo.nombre or ""
 
-        calificacion_final = historial_lookup.get(
+        historial = historial_lookup.get(
             (gm.id_materia, gm.id_periodo),
-            0.0
+            {
+                "calificacion_final": 0.0,
+                "tipo_acreditacion": "OR",
+            },
         )
 
         historial_map[
@@ -204,7 +223,54 @@ def get_kardex_by_matricula(db: Session, matricula: str):
                 "clave": gm.materia.clave or "",
                 "asignatura": gm.materia.nombre or "",
                 "creditos": float(gm.materia.creditos or 0),
-                "calificacion_final": float(calificacion_final),
+                "calificacion_final": float(historial["calificacion_final"]),
+                "tipo_acreditacion": historial["tipo_acreditacion"],
+            }
+        )
+
+    historial_equivalencias = (
+        db.query(HistorialAcademico)
+        .options(
+            joinedload(HistorialAcademico.materia),
+            joinedload(HistorialAcademico.periodo),
+        )
+        .filter(
+            HistorialAcademico.id_alumno == alumno.id_alumno,
+            HistorialAcademico.tipo_evaluacion == "EQUIVALENCIA",
+            HistorialAcademico.resultado == "APROBADO",
+        )
+        .all()
+    )
+
+    for historial in historial_equivalencias:
+        if (historial.id_materia, historial.id_periodo) in materias_con_carga:
+            continue
+
+        materia_plan = plan_materia_por_id.get(historial.id_materia)
+
+        if not materia_plan or not historial.materia:
+            continue
+
+        cuatrimestre_num = (
+            materia_plan.cuatrimestre.numero
+            if materia_plan.cuatrimestre
+            else 0
+        )
+        periodo_escolar = historial.periodo.nombre if historial.periodo else "Equivalencia"
+
+        historial_map[
+            (
+                cuatrimestre_num,
+                periodo_escolar,
+                "EQUIVALENCIA",
+            )
+        ].append(
+            {
+                "clave": historial.materia.clave or "",
+                "asignatura": historial.materia.nombre or "",
+                "creditos": float(historial.materia.creditos or 0),
+                "calificacion_final": float(historial.calificacion_final or 0),
+                "tipo_acreditacion": "EQ",
             }
         )
 

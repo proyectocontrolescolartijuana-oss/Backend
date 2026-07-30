@@ -7,6 +7,7 @@ class KardexMateria(BaseModel):
     asignatura: str = ""
     creditos: float = 0
     calificacion_final: float = 0
+    tipo_acreditacion: str = "OR"
 
 
 class KardexCuatrimestre(BaseModel):

@@ -39,7 +39,8 @@ class HistorialAcademico(Base):
     tipo_evaluacion = Column(
         Enum(
             "ORDINARIO",
-            "EXTRAORDINARIO"
+            "EXTRAORDINARIO",
+            "EQUIVALENCIA"
         )
     )
 
