@@ -8,7 +8,7 @@ class PeriodoBase(BaseModel):
     fecha_fin: date
 
 class PeriodoCreate(PeriodoBase):
-    pass
+    estado: Optional[str] = None
 
 class PeriodoUpdate(BaseModel):
     nombre: Optional[str] = None

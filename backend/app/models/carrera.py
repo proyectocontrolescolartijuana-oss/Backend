@@ -3,7 +3,8 @@ from sqlalchemy import (
     Integer,
     String,
     Enum,
-    Boolean
+    Boolean,
+    Date
 )
 
 from sqlalchemy.orm import relationship
@@ -47,6 +48,11 @@ class Carrera(Base):
     duracion_cuatrimestres = Column(
         Integer,
         nullable=False
+    )
+
+    fecha_autorizacion = Column(
+        Date,
+        nullable=True
     )
 
     estado = Column(

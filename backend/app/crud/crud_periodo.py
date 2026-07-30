@@ -14,12 +14,40 @@ def get_periodo(db: Session, periodo_id: int):
         .first()
     )
 
+def existe_periodo_activo(db: Session, excluir_periodo_id: int | None = None):
+    query = db.query(Periodo).filter(Periodo.estado == "ACTIVO")
+
+    if excluir_periodo_id is not None:
+        query = query.filter(Periodo.id_periodo != excluir_periodo_id)
+
+    return query.first() is not None
+
+def marcar_otros_periodos_como_pendientes(db: Session, periodo_id: int):
+    (
+        db.query(Periodo)
+        .filter(
+            Periodo.estado == "ACTIVO",
+            Periodo.id_periodo != periodo_id
+        )
+        .update(
+            {Periodo.estado: "PENDIENTE"},
+            synchronize_session=False
+        )
+    )
+
 def create_periodo(
     db: Session,
     periodo: PeriodoCreate
 ):
+    periodo_data = periodo.model_dump()
+
+    if existe_periodo_activo(db):
+        periodo_data["estado"] = "PENDIENTE"
+    else:
+        periodo_data["estado"] = periodo_data.get("estado") or "ACTIVO"
+
     nuevo_periodo = Periodo(
-        **periodo.model_dump()
+        **periodo_data
     )
 
     db.add(nuevo_periodo)

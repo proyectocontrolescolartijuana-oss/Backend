@@ -1,15 +1,16 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.docente import Docente
 
 from app.schemas.docente import DocenteCreate
 
 def get_docentes(db: Session):
-    return db.query(Docente).all()
+    return db.query(Docente).options(joinedload(Docente.usuario)).all()
 
 def get_docente(db: Session, docente_id: int):
     return (
         db.query(Docente)
+        .options(joinedload(Docente.usuario))
         .filter(Docente.id_docente == docente_id)
         .first()
     )

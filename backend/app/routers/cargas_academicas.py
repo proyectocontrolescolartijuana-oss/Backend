@@ -24,6 +24,7 @@ from app.models.materia import Materia
 from app.models.materia_prerrequisito import MateriaPrerrequisito
 from app.schemas.carga_academica import CargaAcademicaCreate, CargaAcademicaUpdate
 from app.schemas.detalles import CargaAcademicaDetalleResponse
+from app.services.elegibilidad_academica import validar_prerrequisitos
 
 
 router = APIRouter(
@@ -282,7 +283,14 @@ def _validar_carga_academica(
         )
 
     _validar_cupo(db, grupo_materia, carga_id_actual)
-    _validar_prerrequisitos(db, alumno_id, grupo_materia)
+
+    try:
+        validar_prerrequisitos(db, alumno_id, grupo_materia)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error)
+        )
 
 
 @router.get(

@@ -93,6 +93,8 @@ def _grupo(grupo):
         "id_grupo": grupo.id_grupo,
         "nombre": grupo.nombre,
         "turno": grupo.turno,
+        "id_carrera": grupo.id_carrera,
+        "id_plan": grupo.id_plan,
         "cuatrimestre": _cuatrimestre(grupo.cuatrimestre)
     }
 
@@ -364,6 +366,7 @@ def _asistencia(asistencia):
 def get_grupos_materias_detalle(
     db: Session,
     grupo_id=None,
+    carrera_id=None,
     docente_id=None,
     materia_id=None,
     periodo_id=None
@@ -377,6 +380,9 @@ def get_grupos_materias_detalle(
 
     if grupo_id is not None:
         query = query.filter(GrupoMateria.id_grupo == grupo_id)
+    if carrera_id is not None:
+        query = query.join(GrupoMateria.grupo)
+        query = query.filter(Grupo.id_carrera == carrera_id)
     if docente_id is not None:
         query = query.filter(GrupoMateria.id_docente == docente_id)
     if materia_id is not None:

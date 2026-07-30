@@ -6,7 +6,7 @@ from pydantic import BaseModel
 class GrupoMateriaBase(BaseModel):
     id_grupo: int
     id_materia: int
-    id_docente: int
+    id_docente: Optional[int] = None
     id_periodo: int
     aula: Optional[str] = None
     cupo_maximo: Optional[int] = None

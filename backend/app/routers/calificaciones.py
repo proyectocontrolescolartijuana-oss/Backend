@@ -24,6 +24,7 @@ from app.models.docente import Docente
 from app.models.grupo import Grupo
 from app.models.grupo_materia import GrupoMateria
 from app.models.parcial import Parcial
+from app.models.periodo import Periodo
 from app.models.usuario import Usuario
 from app.schemas.calificacion import (
     BoletaFinalResponse,
@@ -260,9 +261,11 @@ def _validar_grupo_docente(
 ):
     grupo_materia = (
         db.query(GrupoMateria)
+        .join(GrupoMateria.periodo)
         .filter(
             GrupoMateria.id_grupo_materia == grupo_materia_id,
-            GrupoMateria.id_docente == docente_id
+            GrupoMateria.id_docente == docente_id,
+            Periodo.estado == "ACTIVO"
         )
         .first()
     )
@@ -270,10 +273,31 @@ def _validar_grupo_docente(
     if not grupo_materia:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="El grupo no esta asignado al docente actual"
+            detail="El grupo no esta activo o no esta asignado al docente actual"
         )
 
     return grupo_materia
+
+
+def _get_grupos_docente_activos(db: Session, docente_id: int):
+    grupos_ids = [
+        grupo_id
+        for (grupo_id,) in (
+            db.query(GrupoMateria.id_grupo_materia)
+            .join(GrupoMateria.periodo)
+            .filter(
+                GrupoMateria.id_docente == docente_id,
+                Periodo.estado == "ACTIVO"
+            )
+            .order_by(GrupoMateria.id_grupo_materia)
+            .all()
+        )
+    ]
+
+    return [
+        get_grupo_materia_detalle(db, grupo_id)
+        for grupo_id in grupos_ids
+    ]
 
 
 def _build_captura_response(db: Session, grupo_materia_id: int):
@@ -509,10 +533,7 @@ def listar_grupos_captura(
 ):
     docente = _get_docente_actual(db, usuario)
 
-    return get_grupos_materias_detalle(
-        db,
-        docente_id=docente.id_docente
-    )
+    return _get_grupos_docente_activos(db, docente.id_docente)
 
 
 @router.get(

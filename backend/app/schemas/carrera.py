@@ -1,5 +1,6 @@
 from pydantic import BaseModel, field_validator
 from typing import Optional
+from datetime import date
 
 class CarreraBase(BaseModel):
     clave: str
@@ -7,10 +8,11 @@ class CarreraBase(BaseModel):
     nombre: str
     nivel: str
     duracion_cuatrimestres: int
+    fecha_autorizacion: Optional[date] = None
     logo: Optional[str] = None
 
 class CarreraCreate(CarreraBase):
-    pass
+    fecha_autorizacion: date
 
 class CarreraUpdate(BaseModel):
     clave: Optional[str] = None
@@ -18,6 +20,7 @@ class CarreraUpdate(BaseModel):
     nombre: Optional[str] = None
     nivel: Optional[str] = None
     duracion_cuatrimestres: Optional[int] = None
+    fecha_autorizacion: Optional[date] = None
     estado: Optional[bool] = None
     logo: Optional[str] = None
 
@@ -40,6 +43,7 @@ class CarreraSimple(BaseModel):
     clave: Optional[str] = None
     rvoe: Optional[str] = None
     nombre: str
+    fecha_autorizacion: Optional[date] = None
     logo: Optional[str] = None
 
     class Config:

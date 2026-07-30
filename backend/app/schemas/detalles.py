@@ -42,6 +42,8 @@ class GrupoDetalle(BaseModel):
     id_grupo: int
     nombre: Optional[str] = None
     turno: Optional[str] = None
+    id_carrera: Optional[int] = None
+    id_plan: Optional[int] = None
     cuatrimestre: Optional[CuatrimestreDetalle] = None
 
 

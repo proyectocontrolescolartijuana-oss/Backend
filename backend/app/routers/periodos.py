@@ -6,12 +6,7 @@ from fastapi import (
 )
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import joinedload
-
 from app.database import get_db
-from app.models.cuatrimestre import Cuatrimestre
-from app.models.grupo import Grupo
-from app.models.grupo_materia import GrupoMateria
 
 from app.schemas.periodo import (
     PeriodoCreate,
@@ -24,57 +19,18 @@ from app.crud.crud_periodo import (
     get_periodo,
     create_periodo,
     update_periodo,
-    delete_periodo
+    delete_periodo,
+    marcar_otros_periodos_como_pendientes
+)
+from app.services.cierre_periodo_service import (
+    cerrar_periodo_completo,
+    previsualizar_cierre_periodo
 )
 
 router = APIRouter(
     prefix="/periodos",
     tags=["Periodos"]
 )
-
-
-def progresar_grupos_del_periodo(
-    db: Session,
-    periodo_id: int
-):
-    grupos = (
-        db.query(Grupo)
-        .join(GrupoMateria, GrupoMateria.id_grupo == Grupo.id_grupo)
-        .options(
-            joinedload(Grupo.carrera),
-            joinedload(Grupo.cuatrimestre)
-        )
-        .filter(GrupoMateria.id_periodo == periodo_id)
-        .distinct()
-        .all()
-    )
-
-    cuatrimestres = db.query(Cuatrimestre).all()
-    cuatrimestres_por_numero = {
-        cuatrimestre.numero: cuatrimestre
-        for cuatrimestre in cuatrimestres
-    }
-
-    for grupo in grupos:
-        if not grupo.carrera or not grupo.cuatrimestre:
-            continue
-
-        numero_actual = grupo.cuatrimestre.numero
-        ultimo_cuatrimestre = grupo.carrera.duracion_cuatrimestres
-
-        if numero_actual >= ultimo_cuatrimestre:
-            continue
-
-        siguiente_cuatrimestre = cuatrimestres_por_numero.get(
-            numero_actual + 1
-        )
-
-        if not siguiente_cuatrimestre:
-            continue
-
-        grupo.id_cuatrimestre = siguiente_cuatrimestre.id_cuatrimestre
-
-    db.commit()
 
 
 @router.get(
@@ -103,6 +59,49 @@ def obtener_periodo(
         )
 
     return periodo
+
+
+@router.get(
+    "/{periodo_id}/previsualizar-cierre"
+)
+def previsualizar_cierre(
+    periodo_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        return previsualizar_cierre_periodo(db, periodo_id)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=str(error)
+        )
+
+
+@router.post(
+    "/{periodo_id}/cerrar"
+)
+def cerrar_periodo(
+    periodo_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        periodo, resumen = cerrar_periodo_completo(db, periodo_id)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
+
+    return {
+        "periodo": {
+            "id_periodo": periodo.id_periodo,
+            "nombre": periodo.nombre,
+            "fecha_inicio": periodo.fecha_inicio,
+            "fecha_fin": periodo.fecha_fin,
+            "estado": periodo.estado
+        },
+        "resumen": resumen
+    }
 
 @router.post(
     "/",
@@ -139,6 +138,10 @@ def actualizar_periodo(
         periodo.estado == "CERRADO"
     )
 
+    if cerrar_periodo:
+        periodo_actualizado, _resumen = cerrar_periodo_completo(db, periodo_id)
+        return periodo_actualizado
+
     periodo_actualizado = update_periodo(
         db,
         periodo_id,
@@ -151,8 +154,9 @@ def actualizar_periodo(
             detail="Periodo no encontrado"
         )
 
-    if cerrar_periodo:
-        progresar_grupos_del_periodo(db, periodo_id)
+    if periodo.estado == "ACTIVO":
+        marcar_otros_periodos_como_pendientes(db, periodo_id)
+        db.commit()
         periodo_actualizado = get_periodo(db, periodo_id)
 
     return periodo_actualizado

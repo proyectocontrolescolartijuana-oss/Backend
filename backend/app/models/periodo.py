@@ -26,7 +26,7 @@ class Periodo(Base):
     fecha_fin = Column(Date)
 
     estado = Column(
-        Enum("ACTIVO", "CERRADO"),
+        Enum("ACTIVO", "PENDIENTE", "CERRADO"),
         default="ACTIVO"
     )
 

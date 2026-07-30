@@ -19,6 +19,7 @@ from app.models.grupo import Grupo
 from app.models.grupo_materia import GrupoMateria
 from app.models.inscripcion import Inscripcion
 from app.models.carga_academica import CargaAcademica
+from app.models.cierre_periodo import CierrePeriodo
 from app.models.parcial import Parcial
 from app.models.calificacion import Calificacion
 from app.models.extraordinario import Extraordinario
@@ -31,3 +32,4 @@ from app.models.empresa import Empresa
 from app.models.servicio_social import ServicioSocial
 from app.models.practica_profesional import PracticaProfesional
 from app.models.titulacion import Titulacion
+from app.models.documento_titulacion import DocumentoTitulacion

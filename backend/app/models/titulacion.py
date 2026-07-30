@@ -68,3 +68,8 @@ class Titulacion(Base):
     observaciones = Column(Text)
 
     alumno = relationship("Alumno")
+    documentos = relationship(
+        "DocumentoTitulacion",
+        back_populates="titulacion",
+        cascade="all, delete-orphan",
+    )

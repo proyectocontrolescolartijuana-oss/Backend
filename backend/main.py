@@ -62,8 +62,7 @@ app.mount(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://frontend-one-jet-55.vercel.app",
-        "https://frontend-proyectocontrolescolar.vercel.app",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],

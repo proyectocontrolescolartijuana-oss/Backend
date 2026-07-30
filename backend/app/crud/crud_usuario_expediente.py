@@ -57,6 +57,7 @@ def _carrera(carrera):
         "nombre": carrera.nombre,
         "nivel": carrera.nivel,
         "duracion_cuatrimestres": carrera.duracion_cuatrimestres,
+        "fecha_autorizacion": carrera.fecha_autorizacion,
         "estado": carrera.estado
     }
 

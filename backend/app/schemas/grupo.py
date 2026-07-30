@@ -7,6 +7,7 @@ class GrupoBase(BaseModel):
     nombre: Optional[str] = None
     id_carrera: int
     id_cuatrimestre: int
+    id_plan: Optional[int] = None
     turno: Optional[str] = None
 
 

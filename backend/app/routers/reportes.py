@@ -249,6 +249,7 @@ def _sheet_carreras(db: Session) -> dict:
                 "key": "duracion_cuatrimestres",
                 "header": "Duracion cuatrimestres"
             },
+            {"key": "fecha_autorizacion", "header": "Fecha autorizacion"},
             {"key": "estado", "header": "Estado"},
             {"key": "planes", "header": "Planes registrados"},
         ],
@@ -260,6 +261,7 @@ def _sheet_carreras(db: Session) -> dict:
                 "nombre": carrera.nombre,
                 "nivel": carrera.nivel,
                 "duracion_cuatrimestres": carrera.duracion_cuatrimestres,
+                "fecha_autorizacion": carrera.fecha_autorizacion,
                 "estado": _activo_inactivo(carrera.estado),
                 "planes": len(carrera.planes),
             }

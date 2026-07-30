@@ -55,6 +55,7 @@ def _validar_grupo_materia_unica(
 )
 def listar_grupos_materias(
     grupo_id: Optional[int] = None,
+    carrera_id: Optional[int] = None,
     docente_id: Optional[int] = None,
     materia_id: Optional[int] = None,
     periodo_id: Optional[int] = None,
@@ -63,6 +64,7 @@ def listar_grupos_materias(
     return get_grupos_materias_detalle(
         db,
         grupo_id=grupo_id,
+        carrera_id=carrera_id,
         docente_id=docente_id,
         materia_id=materia_id,
         periodo_id=periodo_id

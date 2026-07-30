@@ -32,6 +32,11 @@ class Grupo(Base):
         ForeignKey("cuatrimestres.id_cuatrimestre")
     )
 
+    id_plan = Column(
+        Integer,
+        ForeignKey("planes_estudio.id_plan")
+    )
+
     turno = Column(
         Enum("MATUTINO", "VESPERTINO")
     )
@@ -39,6 +44,8 @@ class Grupo(Base):
     carrera = relationship("Carrera")
 
     cuatrimestre = relationship("Cuatrimestre")
+
+    plan = relationship("PlanEstudio")
 
     materias = relationship(
         "GrupoMateria",
