@@ -6,7 +6,6 @@ def construir_url_logo(valor: str | None) -> str | None:
         (
             "http://",
             "https://",
-            "/static/",
             "/carreras/logos/",
             "blob:",
             "data:",
@@ -15,6 +14,6 @@ def construir_url_logo(valor: str | None) -> str | None:
         return valor
 
     if valor.startswith("logos-carreras/"):
-        return f"http://localhost:8000/carreras/logos/{valor}"
+        return f"/carreras/logos/{valor}"
 
-    return f"http://localhost:8000/static/logos/{valor}"
+    return f"/carreras/logos/logos-carreras/{valor}"

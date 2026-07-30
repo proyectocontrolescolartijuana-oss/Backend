@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -7,38 +5,23 @@ from app.models.carrera import Carrera
 from app.schemas.carrera import CarreraCreate
 from app.services.blob_service import BlobStorageError, delete_blob
 
-LOGOS_DIR = Path(__file__).resolve().parents[1] / "static" / "logos"
 BLOB_LOGOS_PREFIX = "logos-carreras/"
 
 
-def _nombre_logo_local(logo: str | None):
+def _blob_key_logo(logo: str | None):
     if not logo:
         return None
 
-    if logo.startswith("http://localhost:8000/static/logos/"):
-        return logo.rsplit("/", 1)[-1]
-
-    if logo.startswith("/static/logos/"):
-        return logo.rsplit("/", 1)[-1]
+    if "/carreras/logos/" in logo:
+        return logo.split("/carreras/logos/", 1)[1]
 
     if logo.startswith(("http://", "https://")):
         return None
 
-    return Path(logo).name
+    if logo.startswith(BLOB_LOGOS_PREFIX):
+        return logo
 
-
-def _es_logo_blob(logo: str | None):
-    if not logo:
-        return False
-
-    if logo.startswith("/carreras/logos/"):
-        logo = logo.removeprefix("/carreras/logos/")
-
-    return logo.startswith(BLOB_LOGOS_PREFIX)
-
-
-def _blob_key_logo(logo: str):
-    return logo.removeprefix("/carreras/logos/")
+    return f"{BLOB_LOGOS_PREFIX}{logo.rsplit('/', 1)[-1]}"
 
 
 def _logo_en_uso(db: Session, logo: str, excluir_carrera_id: int | None = None):
@@ -61,27 +44,15 @@ def _eliminar_logo_si_no_esta_en_uso(
     if _logo_en_uso(db, logo, excluir_carrera_id):
         return
 
-    if _es_logo_blob(logo):
-        try:
-            delete_blob(_blob_key_logo(logo))
-        except BlobStorageError:
-            pass
+    object_key = _blob_key_logo(logo)
+
+    if not object_key:
         return
-
-    nombre_logo = _nombre_logo_local(logo)
-
-    if not nombre_logo:
-        return
-
-    archivo = (LOGOS_DIR / nombre_logo).resolve()
 
     try:
-        archivo.relative_to(LOGOS_DIR.resolve())
-    except ValueError:
-        return
-
-    if archivo.is_file():
-        archivo.unlink()
+        delete_blob(object_key)
+    except BlobStorageError:
+        pass
 
 
 def get_carreras(db: Session):
