@@ -33,3 +33,4 @@ from app.models.servicio_social import ServicioSocial
 from app.models.practica_profesional import PracticaProfesional
 from app.models.titulacion import Titulacion
 from app.models.documento_titulacion import DocumentoTitulacion
+from app.models.documento_egresado import DocumentoEgresado

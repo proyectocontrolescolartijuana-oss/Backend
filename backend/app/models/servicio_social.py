@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    Boolean,
     Column,
     BigInteger,
     Integer,
@@ -51,3 +52,7 @@ class ServicioSocial(Base):
         "Empresa",
         back_populates="servicios"
     )
+
+    carta_unifront = Column(Boolean, nullable=False, default=False)
+
+    carta_procedencia = Column(Boolean, nullable=False, default=False)

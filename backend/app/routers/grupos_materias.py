@@ -14,6 +14,7 @@ from app.crud.crud_grupo_materia import (
     update_grupo_materia
 )
 from app.database import get_db
+from app.models.grupo import Grupo
 from app.models.grupo_materia import GrupoMateria
 from app.schemas.detalles import GrupoMateriaDetalleResponse
 from app.schemas.grupo_materia import GrupoMateriaCreate, GrupoMateriaUpdate
@@ -46,6 +47,26 @@ def _validar_grupo_materia_unica(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La materia ya esta asignada a ese grupo y periodo"
+        )
+
+
+def _validar_grupo_activo(db: Session, grupo_id: int):
+    grupo = (
+        db.query(Grupo)
+        .filter(Grupo.id_grupo == grupo_id)
+        .first()
+    )
+
+    if not grupo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Grupo no encontrado"
+        )
+
+    if grupo.estatus != "ACTIVO":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puedes crear materias-grupo para un grupo cerrado"
         )
 
 
@@ -98,6 +119,7 @@ def crear_grupo_materia(
     grupo_materia: GrupoMateriaCreate,
     db: Session = Depends(get_db)
 ):
+    _validar_grupo_activo(db, grupo_materia.id_grupo)
     _validar_grupo_materia_unica(
         db,
         id_grupo=grupo_materia.id_grupo,
@@ -128,6 +150,10 @@ def actualizar_grupo_materia(
         )
 
     update_data = grupo_materia.model_dump(exclude_unset=True)
+    _validar_grupo_activo(
+        db,
+        update_data.get("id_grupo", grupo_materia_actual.id_grupo)
+    )
     _validar_grupo_materia_unica(
         db,
         id_grupo=update_data.get("id_grupo", grupo_materia_actual.id_grupo),

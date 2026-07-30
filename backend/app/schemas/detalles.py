@@ -44,6 +44,7 @@ class GrupoDetalle(BaseModel):
     turno: Optional[str] = None
     id_carrera: Optional[int] = None
     id_plan: Optional[int] = None
+    estatus: Optional[str] = None
     cuatrimestre: Optional[CuatrimestreDetalle] = None
 
 
@@ -226,6 +227,8 @@ class ServicioSocialDetalleResponse(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    carta_unifront: bool = False
+    carta_procedencia: bool = False
     alumno: Optional[AlumnoDetalle] = None
     empresa: Optional[EmpresaDetalle] = None
 
@@ -238,6 +241,8 @@ class PracticaProfesionalDetalleResponse(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    oficio_campo: bool = False
+    horas_campo: Optional[int] = None
     alumno: Optional[AlumnoDetalle] = None
     empresa: Optional[EmpresaDetalle] = None
 

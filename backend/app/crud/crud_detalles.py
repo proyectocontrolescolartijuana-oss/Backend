@@ -95,6 +95,7 @@ def _grupo(grupo):
         "turno": grupo.turno,
         "id_carrera": grupo.id_carrera,
         "id_plan": grupo.id_plan,
+        "estatus": grupo.estatus,
         "cuatrimestre": _cuatrimestre(grupo.cuatrimestre)
     }
 
@@ -752,6 +753,8 @@ def get_servicios_sociales_detalle(db: Session, alumno_id=None, empresa_id=None,
             "fecha_inicio": servicio.fecha_inicio,
             "fecha_fin": servicio.fecha_fin,
             "estado": servicio.estado,
+            "carta_unifront": servicio.carta_unifront,
+            "carta_procedencia": servicio.carta_procedencia,
             "alumno": _alumno(servicio.alumno),
             "empresa": _empresa(servicio.empresa)
         }
@@ -781,6 +784,8 @@ def get_practicas_profesionales_detalle(db: Session, alumno_id=None, empresa_id=
             "fecha_inicio": practica.fecha_inicio,
             "fecha_fin": practica.fecha_fin,
             "estado": practica.estado,
+            "oficio_campo": practica.oficio_campo,
+            "horas_campo": practica.horas_campo,
             "alumno": _alumno(practica.alumno),
             "empresa": _empresa(practica.empresa)
         }

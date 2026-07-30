@@ -257,6 +257,87 @@ def _materias_plan_cuatrimestre(db: Session, id_plan: int, id_cuatrimestre: int)
     )
 
 
+def _ids_materias_obligatorias_plan(db: Session, id_plan: int):
+    return {
+        id_materia
+        for (id_materia,) in (
+            db.query(PlanMateria.id_materia)
+            .filter(
+                PlanMateria.id_plan == id_plan,
+                PlanMateria.obligatoria.is_(True),
+            )
+            .all()
+        )
+    }
+
+
+def _ids_materias_aprobadas_alumno(db: Session, alumno_id: int):
+    return {
+        id_materia
+        for (id_materia,) in (
+            db.query(HistorialAcademico.id_materia)
+            .filter(
+                HistorialAcademico.id_alumno == alumno_id,
+                HistorialAcademico.resultado == "APROBADO",
+            )
+            .distinct()
+            .all()
+        )
+    }
+
+
+def _alumno_completo_plan(db: Session, alumno: Alumno):
+    if not alumno or not alumno.id_plan:
+        return False
+
+    materias_plan = _ids_materias_obligatorias_plan(db, alumno.id_plan)
+
+    if not materias_plan:
+        return False
+
+    materias_aprobadas = _ids_materias_aprobadas_alumno(
+        db,
+        alumno.id_alumno,
+    )
+
+    return materias_plan.issubset(materias_aprobadas)
+
+
+def _cerrar_grupo_terminal(
+    db: Session,
+    *,
+    grupo: Grupo,
+    inscripciones,
+    resumen: dict,
+    preview: bool,
+):
+    resumen["grupos_finalizados"] += 1
+    resumen["grupos_cerrados"] += 1
+
+    if not preview:
+        grupo.estatus = "CERRADO"
+
+    for inscripcion in inscripciones:
+        alumno = inscripcion.alumno
+
+        if not preview:
+            inscripcion.estado = "FINALIZADO"
+
+        if not alumno or alumno.estatus != "ACTIVO":
+            continue
+
+        if _alumno_completo_plan(db, alumno):
+            resumen["alumnos_egresados"] += 1
+
+            if not preview:
+                alumno.estatus = "EGRESADO"
+            continue
+
+        resumen["advertencias"].append(
+            f"Alumno {alumno.matricula} no egreso porque aun tiene materias pendientes o reprobadas."
+        )
+
+
 def _buscar_o_crear_grupo_materia(
     db: Session,
     *,
@@ -408,7 +489,13 @@ def _avanzar_grupos_y_generar_oferta(
         ultimo_cuatrimestre = grupo.carrera.duracion_cuatrimestres
 
         if numero_actual >= ultimo_cuatrimestre:
-            resumen["grupos_finalizados"] += 1
+            _cerrar_grupo_terminal(
+                db,
+                grupo=grupo,
+                inscripciones=inscripciones,
+                resumen=resumen,
+                preview=preview,
+            )
             continue
 
         siguiente_cuatrimestre = cuatrimestres_por_numero.get(numero_actual + 1)
@@ -507,6 +594,8 @@ def _resumen_base(periodo: Periodo, periodo_siguiente: Periodo | None):
         "cargas_cerradas": 0,
         "grupos_avanzados": 0,
         "grupos_finalizados": 0,
+        "grupos_cerrados": 0,
+        "alumnos_egresados": 0,
         "materias_grupo_creadas": 0,
         "inscripciones_creadas": 0,
         "cargas_creadas": 0,

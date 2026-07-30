@@ -228,7 +228,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
             }
         )
 
-    historial_equivalencias = (
+    historial_rows_sin_carga = (
         db.query(HistorialAcademico)
         .options(
             joinedload(HistorialAcademico.materia),
@@ -236,13 +236,12 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         )
         .filter(
             HistorialAcademico.id_alumno == alumno.id_alumno,
-            HistorialAcademico.tipo_evaluacion == "EQUIVALENCIA",
             HistorialAcademico.resultado == "APROBADO",
         )
         .all()
     )
 
-    for historial in historial_equivalencias:
+    for historial in historial_rows_sin_carga:
         if (historial.id_materia, historial.id_periodo) in materias_con_carga:
             continue
 
@@ -257,12 +256,22 @@ def get_kardex_by_matricula(db: Session, matricula: str):
             else 0
         )
         periodo_escolar = historial.periodo.nombre if historial.periodo else "Equivalencia"
+        tipo_acreditacion = (
+            "EQ"
+            if historial.tipo_evaluacion == "EQUIVALENCIA"
+            else "OR"
+        )
+        grupo_nombre = (
+            "EQUIVALENCIA"
+            if historial.tipo_evaluacion == "EQUIVALENCIA"
+            else "HISTORIAL"
+        )
 
         historial_map[
             (
                 cuatrimestre_num,
                 periodo_escolar,
-                "EQUIVALENCIA",
+                grupo_nombre,
             )
         ].append(
             {
@@ -270,7 +279,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
                 "asignatura": historial.materia.nombre or "",
                 "creditos": float(historial.materia.creditos or 0),
                 "calificacion_final": float(historial.calificacion_final or 0),
-                "tipo_acreditacion": "EQ",
+                "tipo_acreditacion": tipo_acreditacion,
             }
         )
 

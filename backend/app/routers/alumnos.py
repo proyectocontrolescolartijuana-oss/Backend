@@ -55,7 +55,8 @@ def _grupo_detalle(grupo):
         "id_grupo": grupo.id_grupo,
         "nombre": grupo.nombre,
         "turno": grupo.turno,
-        "id_carrera": grupo.id_carrera
+        "id_carrera": grupo.id_carrera,
+        "estatus": grupo.estatus
     }
 
 

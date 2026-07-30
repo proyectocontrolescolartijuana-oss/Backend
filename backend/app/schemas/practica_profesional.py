@@ -13,6 +13,8 @@ class PracticaProfesionalBase(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    oficio_campo: bool = False
+    horas_campo: Optional[int] = None
 
 
 class PracticaProfesionalCreate(PracticaProfesionalBase):
@@ -28,6 +30,13 @@ class PracticaProfesionalUpdate(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    oficio_campo: Optional[bool] = None
+    horas_campo: Optional[int] = None
+
+
+class PracticaProfesionalEstatusUpdate(BaseModel):
+    oficio_campo: bool
+    horas_campo: Optional[int] = None
 
 
 class PracticaProfesionalResponse(PracticaProfesionalBase):

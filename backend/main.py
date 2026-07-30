@@ -39,6 +39,7 @@ from app.routers import (
     roles,
     auth,
     documentos,
+    documentos_egresados,
     plan_estudio,
     reportes,
     kardex,
@@ -109,6 +110,7 @@ app.include_router(tutores.router)
 # app.include_router(roles.router)
 app.include_router(auth.router)
 app.include_router(documentos.router)
+app.include_router(documentos_egresados.router)
 app.include_router(plan_estudio.router)
 app.include_router(reportes.router)
 app.include_router(kardex.router)

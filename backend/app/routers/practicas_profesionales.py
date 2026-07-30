@@ -14,8 +14,10 @@ from app.database import get_db
 from app.schemas.detalles import PracticaProfesionalDetalleResponse
 from app.schemas.practica_profesional import (
     PracticaProfesionalCreate,
+    PracticaProfesionalEstatusUpdate,
     PracticaProfesionalUpdate
 )
+from app.models.practica_profesional import PracticaProfesional
 
 
 router = APIRouter(
@@ -36,6 +38,36 @@ def listar_practicas_profesionales(
         alumno_id=alumno_id,
         empresa_id=empresa_id,
         estado=estado
+    )
+
+
+@router.patch(
+    "/alumno/{alumno_id}/estatus",
+    response_model=PracticaProfesionalDetalleResponse
+)
+def guardar_estatus_practica(
+    alumno_id: int,
+    datos: PracticaProfesionalEstatusUpdate,
+    db: Session = Depends(get_db)
+):
+    practica = (
+        db.query(PracticaProfesional)
+        .filter(PracticaProfesional.id_alumno == alumno_id)
+        .first()
+    )
+
+    if practica is None:
+        practica = PracticaProfesional(id_alumno=alumno_id)
+        db.add(practica)
+
+    practica.oficio_campo = datos.oficio_campo
+    practica.horas_campo = datos.horas_campo
+    db.commit()
+    db.refresh(practica)
+
+    return next(
+        item for item in get_practicas_profesionales_detalle(db)
+        if item["id_practica"] == practica.id_practica
     )
 
 

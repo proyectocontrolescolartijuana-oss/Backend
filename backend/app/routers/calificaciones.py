@@ -23,8 +23,10 @@ from app.models.cuatrimestre import Cuatrimestre
 from app.models.docente import Docente
 from app.models.grupo import Grupo
 from app.models.grupo_materia import GrupoMateria
+from app.models.historial_academico import HistorialAcademico
 from app.models.parcial import Parcial
 from app.models.periodo import Periodo
+from app.models.plan_materia import PlanMateria
 from app.models.usuario import Usuario
 from app.schemas.calificacion import (
     BoletaFinalResponse,
@@ -461,6 +463,54 @@ def _build_boleta_final(db: Session, alumno_id: int, periodo_id: int):
             "calificacion_final": calificacion_final
         })
 
+    if not materias:
+        historiales = (
+            db.query(HistorialAcademico)
+            .options(
+                joinedload(HistorialAcademico.materia),
+                joinedload(HistorialAcademico.periodo)
+            )
+            .filter(
+                HistorialAcademico.id_alumno == alumno_id,
+                HistorialAcademico.id_periodo == periodo_id,
+                HistorialAcademico.calificacion_final.isnot(None)
+            )
+            .order_by(HistorialAcademico.id_materia.asc())
+            .all()
+        )
+        materias_plan = {
+            plan_materia.id_materia: plan_materia
+            for plan_materia in (
+                db.query(PlanMateria)
+                .options(joinedload(PlanMateria.cuatrimestre))
+                .filter(PlanMateria.id_plan == alumno.id_plan)
+                .all()
+            )
+        }
+
+        for historial in historiales:
+            materia = historial.materia
+            periodo = periodo or historial.periodo
+            materia_plan = materias_plan.get(historial.id_materia)
+            cuatrimestre = cuatrimestre or (
+                materia_plan.cuatrimestre
+                if materia_plan and materia_plan.cuatrimestre else None
+            )
+
+            materias.append({
+                "id_materia": materia.id_materia if materia else None,
+                "nombre": materia.nombre if materia else None,
+                "clave": materia.clave if materia else None,
+                "calificacion_final": float(historial.calificacion_final)
+            })
+
+    if periodo is None:
+        periodo = (
+            db.query(Periodo)
+            .filter(Periodo.id_periodo == periodo_id)
+            .first()
+        )
+
     calificaciones_finales = [
         materia["calificacion_final"]
         for materia in materias
@@ -580,6 +630,7 @@ def obtener_cuadro_honor(
         )
     else:
         query = query.filter(
+            Alumno.estatus == "ACTIVO",
             Grupo.cuatrimestre.has(numero=cuatrimestre)
         )
 

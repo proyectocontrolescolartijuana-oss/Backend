@@ -1,6 +1,8 @@
 from sqlalchemy import (
+    Boolean,
     Column,
     BigInteger,
+    Integer,
     String,
     Date,
     Enum,
@@ -53,3 +55,7 @@ class PracticaProfesional(Base):
         "Empresa",
         back_populates="practicas"
     )
+
+    oficio_campo = Column(Boolean, nullable=False, default=False)
+
+    horas_campo = Column(Integer)

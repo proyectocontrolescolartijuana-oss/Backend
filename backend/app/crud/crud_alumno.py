@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.alumno import Alumno
+from app.models.grupo import Grupo
 from app.models.inscripcion import Inscripcion
 from app.models.periodo import Periodo
 
@@ -64,8 +65,80 @@ def _get_periodo_activo_id(db: Session):
     return periodo.id_periodo if periodo else None
 
 
+def _get_periodos_alta_disponibles(db: Session):
+    periodos_activos = (
+        db.query(Periodo)
+        .filter(Periodo.estado == "ACTIVO")
+        .order_by(Periodo.fecha_inicio.asc(), Periodo.id_periodo.asc())
+        .all()
+    )
+
+    pendiente_futuro = (
+        db.query(Periodo)
+        .filter(
+            Periodo.estado == "PENDIENTE",
+            Periodo.fecha_inicio >= date.today(),
+        )
+        .order_by(Periodo.fecha_inicio.asc(), Periodo.id_periodo.asc())
+        .first()
+    )
+
+    pendiente_cercano = pendiente_futuro or (
+        db.query(Periodo)
+        .filter(Periodo.estado == "PENDIENTE")
+        .order_by(Periodo.fecha_inicio.asc(), Periodo.id_periodo.asc())
+        .first()
+    )
+
+    periodos = [*periodos_activos]
+
+    if pendiente_cercano:
+        periodos.append(pendiente_cercano)
+
+    return periodos
+
+
+def _validar_periodo_alta(db: Session, periodo_id: int):
+    periodos_disponibles = _get_periodos_alta_disponibles(db)
+    ids_disponibles = {
+        periodo.id_periodo
+        for periodo in periodos_disponibles
+    }
+
+    if periodo_id not in ids_disponibles:
+        raise ValueError(
+            "Solo puedes inscribir alumnos en el periodo activo o en el "
+            "periodo pendiente mas cercano"
+        )
+
+    return periodo_id
+
+
+def _validar_grupo_alumno(db: Session, grupo_id: int, alumno_data: dict):
+    grupo = (
+        db.query(Grupo)
+        .filter(Grupo.id_grupo == grupo_id)
+        .first()
+    )
+
+    if not grupo:
+        raise ValueError("Grupo no encontrado")
+
+    if grupo.estatus != "ACTIVO":
+        raise ValueError("No puedes inscribir alumnos en un grupo cerrado")
+
+    if grupo.id_carrera != alumno_data.get("id_carrera"):
+        raise ValueError("El grupo seleccionado no pertenece a la carrera")
+
+    if grupo.id_plan and grupo.id_plan != alumno_data.get("id_plan"):
+        raise ValueError("El grupo seleccionado no pertenece al plan de estudio")
+
+    return grupo
+
+
 def get_alumnos(db: Session):
     return db.query(Alumno).all()
+
 
 def get_alumno(
     db: Session,
@@ -108,12 +181,15 @@ def create_alumno(
             db.flush()
 
             if id_grupo:
+                _validar_grupo_alumno(db, id_grupo, alumno_data)
                 id_periodo_inscripcion = id_periodo or _get_periodo_activo_id(db)
 
                 if not id_periodo_inscripcion:
                     raise ValueError(
                         "Selecciona un periodo para inscribir al alumno"
                     )
+
+                _validar_periodo_alta(db, id_periodo_inscripcion)
 
                 db.add(
                     Inscripcion(

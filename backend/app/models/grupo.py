@@ -41,6 +41,11 @@ class Grupo(Base):
         Enum("MATUTINO", "VESPERTINO")
     )
 
+    estatus = Column(
+        Enum("ACTIVO", "CERRADO"),
+        default="ACTIVO"
+    )
+
     carrera = relationship("Carrera")
 
     cuatrimestre = relationship("Cuatrimestre")

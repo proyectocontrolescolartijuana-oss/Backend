@@ -12,6 +12,8 @@ class ServicioSocialBase(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    carta_unifront: bool = False
+    carta_procedencia: bool = False
 
 
 class ServicioSocialCreate(ServicioSocialBase):
@@ -26,6 +28,13 @@ class ServicioSocialUpdate(BaseModel):
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     estado: Optional[str] = None
+    carta_unifront: Optional[bool] = None
+    carta_procedencia: Optional[bool] = None
+
+
+class ServicioSocialEstatusUpdate(BaseModel):
+    carta_unifront: bool
+    carta_procedencia: bool
 
 
 class ServicioSocialResponse(ServicioSocialBase):

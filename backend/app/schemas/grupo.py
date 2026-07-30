@@ -9,6 +9,7 @@ class GrupoBase(BaseModel):
     id_cuatrimestre: int
     id_plan: Optional[int] = None
     turno: Optional[str] = None
+    estatus: Optional[str] = "ACTIVO"
 
 
 class GrupoCreate(GrupoBase):
@@ -19,7 +20,9 @@ class GrupoUpdate(BaseModel):
     nombre: Optional[str] = None
     id_carrera: Optional[int] = None
     id_cuatrimestre: Optional[int] = None
+    id_plan: Optional[int] = None
     turno: Optional[str] = None
+    estatus: Optional[str] = None
 
 
 class GrupoResponse(GrupoBase):

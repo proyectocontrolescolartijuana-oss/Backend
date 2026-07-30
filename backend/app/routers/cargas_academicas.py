@@ -230,9 +230,18 @@ def _validar_carga_academica(
             detail="Alumno no encontrado"
         )
 
+    if alumno.estatus != "ACTIVO":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo puedes agregar cargas academicas a alumnos activos"
+        )
+
     grupo_materia = (
         db.query(GrupoMateria)
-        .options(joinedload(GrupoMateria.materia))
+        .options(
+            joinedload(GrupoMateria.materia),
+            joinedload(GrupoMateria.grupo)
+        )
         .filter(GrupoMateria.id_grupo_materia == grupo_materia_id)
         .first()
     )
@@ -241,6 +250,12 @@ def _validar_carga_academica(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Grupo materia no encontrado"
+        )
+
+    if grupo_materia.grupo and grupo_materia.grupo.estatus != "ACTIVO":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puedes agregar alumnos a un grupo cerrado"
         )
 
     duplicada = db.query(CargaAcademica).filter(

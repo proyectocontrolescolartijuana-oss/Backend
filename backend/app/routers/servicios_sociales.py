@@ -12,7 +12,12 @@ from app.crud.crud_servicio_social import (
 )
 from app.database import get_db
 from app.schemas.detalles import ServicioSocialDetalleResponse
-from app.schemas.servicio_social import ServicioSocialCreate, ServicioSocialUpdate
+from app.schemas.servicio_social import (
+    ServicioSocialCreate,
+    ServicioSocialEstatusUpdate,
+    ServicioSocialUpdate
+)
+from app.models.servicio_social import ServicioSocial
 
 
 router = APIRouter(
@@ -33,6 +38,36 @@ def listar_servicios_sociales(
         alumno_id=alumno_id,
         empresa_id=empresa_id,
         estado=estado
+    )
+
+
+@router.patch(
+    "/alumno/{alumno_id}/estatus",
+    response_model=ServicioSocialDetalleResponse
+)
+def guardar_estatus_servicio(
+    alumno_id: int,
+    datos: ServicioSocialEstatusUpdate,
+    db: Session = Depends(get_db)
+):
+    servicio = (
+        db.query(ServicioSocial)
+        .filter(ServicioSocial.id_alumno == alumno_id)
+        .first()
+    )
+
+    if servicio is None:
+        servicio = ServicioSocial(id_alumno=alumno_id)
+        db.add(servicio)
+
+    servicio.carta_unifront = datos.carta_unifront
+    servicio.carta_procedencia = datos.carta_procedencia
+    db.commit()
+    db.refresh(servicio)
+
+    return next(
+        item for item in get_servicios_sociales_detalle(db)
+        if item["id_servicio"] == servicio.id_servicio
     )
 
 

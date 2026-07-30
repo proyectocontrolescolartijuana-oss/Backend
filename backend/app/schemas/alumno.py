@@ -59,6 +59,7 @@ class AlumnoGrupoDetalle(BaseModel):
     nombre: Optional[str] = None
     turno: Optional[str] = None
     id_carrera: Optional[int] = None
+    estatus: Optional[str] = None
 
 
 class AlumnoDetalleResponse(BaseModel):
