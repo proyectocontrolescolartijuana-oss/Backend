@@ -35,6 +35,7 @@ from app.routers import (
     servicios_sociales,
     tipos_documento,
     titulaciones,
+    documentos_egresados,
     tutores,
     roles,
     auth,

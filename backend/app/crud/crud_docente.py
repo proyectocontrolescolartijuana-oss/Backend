@@ -1,11 +1,18 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.docente import Docente
 
 from app.schemas.docente import DocenteCreate
 
-def get_docentes(db: Session):
-    return db.query(Docente).options(joinedload(Docente.usuario)).all()
+def get_docentes(db: Session, activos: Optional[bool] = True):
+    query = db.query(Docente).options(joinedload(Docente.usuario))
+
+    if activos is not None:
+        query = query.filter(Docente.estado.is_(activos))
+
+    return query.all()
 
 def get_docente(db: Session, docente_id: int):
     return (

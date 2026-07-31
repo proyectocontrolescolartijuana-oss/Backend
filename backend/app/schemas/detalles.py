@@ -226,6 +226,8 @@ class ServicioSocialDetalleResponse(BaseModel):
     horas_completadas: Optional[int] = None
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    carta_unifront: bool = False
+    carta_procedencia: bool = False
     estado: Optional[str] = None
     carta_unifront: bool = False
     carta_procedencia: bool = False
@@ -240,6 +242,8 @@ class PracticaProfesionalDetalleResponse(BaseModel):
     asesor_universidad: Optional[str] = None
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
+    oficio_campo: bool = False
+    horas_campo: Optional[int] = None
     estado: Optional[str] = None
     oficio_campo: bool = False
     horas_campo: Optional[int] = None

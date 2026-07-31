@@ -35,6 +35,9 @@ class ServicioSocialUpdate(BaseModel):
 class ServicioSocialEstatusUpdate(BaseModel):
     carta_unifront: bool
     carta_procedencia: bool
+    horas_completadas: Optional[int] = None
+    id_empresa: Optional[int] = None
+    empresa_nombre: Optional[str] = None
 
 
 class ServicioSocialResponse(ServicioSocialBase):

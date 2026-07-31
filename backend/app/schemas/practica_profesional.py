@@ -37,6 +37,8 @@ class PracticaProfesionalUpdate(BaseModel):
 class PracticaProfesionalEstatusUpdate(BaseModel):
     oficio_campo: bool
     horas_campo: Optional[int] = None
+    id_empresa: Optional[int] = None
+    empresa_nombre: Optional[str] = None
 
 
 class PracticaProfesionalResponse(PracticaProfesionalBase):

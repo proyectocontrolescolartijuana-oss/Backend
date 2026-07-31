@@ -18,12 +18,37 @@ from app.schemas.practica_profesional import (
     PracticaProfesionalUpdate
 )
 from app.models.practica_profesional import PracticaProfesional
+from app.models.empresa import Empresa
 
 
 router = APIRouter(
     prefix="/practicas-profesionales",
     tags=["Practicas profesionales"]
 )
+
+
+def resolver_empresa_id(db: Session, empresa_id: Optional[int], empresa_nombre: Optional[str]):
+    if empresa_id is not None:
+        return empresa_id
+
+    if empresa_nombre is None:
+        return None
+
+    nombre = empresa_nombre.strip()
+    if not nombre:
+        return None
+
+    empresa = (
+        db.query(Empresa)
+        .filter(Empresa.nombre == nombre)
+        .first()
+    )
+    if empresa is None:
+        empresa = Empresa(nombre=nombre)
+        db.add(empresa)
+        db.flush()
+
+    return empresa.id_empresa
 
 
 @router.get("/", response_model=list[PracticaProfesionalDetalleResponse])
@@ -88,6 +113,42 @@ def obtener_practica_profesional(
         raise HTTPException(status_code=404, detail="Practica profesional no encontrada")
 
     return practica
+
+@router.patch(
+    "/alumno/{alumno_id}/estatus",
+    response_model=PracticaProfesionalDetalleResponse
+)
+def guardar_estatus_practica(
+    alumno_id: int,
+    datos: PracticaProfesionalEstatusUpdate,
+    db: Session = Depends(get_db)
+):
+    practica = (
+        db.query(PracticaProfesional)
+        .filter(PracticaProfesional.id_alumno == alumno_id)
+        .first()
+    )
+
+    if practica is None:
+        practica = PracticaProfesional(id_alumno=alumno_id)
+        db.add(practica)
+
+    practica.oficio_campo = datos.oficio_campo
+    practica.horas_campo = datos.horas_campo
+    if datos.id_empresa is not None or datos.empresa_nombre is not None:
+        practica.id_empresa = resolver_empresa_id(
+            db,
+            datos.id_empresa,
+            datos.empresa_nombre
+        )
+    db.commit()
+    db.refresh(practica)
+
+    return next(
+        item for item in get_practicas_profesionales_detalle(db)
+        if item["id_practica"] == practica.id_practica
+    )
+
 
 
 @router.post("/", response_model=PracticaProfesionalDetalleResponse)

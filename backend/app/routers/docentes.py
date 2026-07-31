@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Query,
     status
 )
 
@@ -35,9 +36,13 @@ router = APIRouter(
     response_model=list[DocenteResponse]
 )
 def listar_docentes(
+    activos: bool | None = Query(
+        True,
+        description="Filtra docentes activos. Usa activos=false para inactivos.",
+    ),
     db: Session = Depends(get_db)
 ):
-    return get_docentes(db)
+    return get_docentes(db, activos=activos)
 
 @router.get(
     "/{docente_id}",
