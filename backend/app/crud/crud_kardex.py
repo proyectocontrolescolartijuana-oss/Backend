@@ -78,7 +78,11 @@ def buscar_alumnos_kardex(db: Session, query: str, limit: int = 8):
     ]
 
 
-def get_kardex_by_matricula(db: Session, matricula: str):
+def get_kardex_by_matricula(
+    db: Session,
+    matricula: str,
+    incluir_plan: bool = False,
+):
     alumno = (
         db.query(Alumno)
         .options(
@@ -167,6 +171,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         .filter(
             PlanMateria.id_plan == alumno.id_plan,
         )
+        .order_by(PlanMateria.id_cuatrimestre, PlanMateria.id_plan_materia)
         .all()
     )
     cuatrimestre_por_materia = {
@@ -179,6 +184,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         for pm in plan_materias
     }
     materias_con_carga = set()
+    materias_en_historial = set()
 
     for carga in cargas:
         gm = carga.grupo_materia
@@ -196,6 +202,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
             continue
 
         materias_con_carga.add((gm.id_materia, gm.id_periodo))
+        materias_en_historial.add(gm.id_materia)
         cuatrimestre_num = cuatrimestre_por_materia.get(gm.id_materia, 0)
 
         if not cuatrimestre_num and gm.grupo.cuatrimestre:
@@ -207,7 +214,7 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         historial = historial_lookup.get(
             (gm.id_materia, gm.id_periodo),
             {
-                "calificacion_final": 0.0,
+                "calificacion_final": None,
                 "tipo_acreditacion": "OR",
             },
         )
@@ -221,9 +228,14 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         ].append(
             {
                 "clave": gm.materia.clave or "",
+                "id_materia": gm.materia.id_materia,
                 "asignatura": gm.materia.nombre or "",
                 "creditos": float(gm.materia.creditos or 0),
-                "calificacion_final": float(historial["calificacion_final"]),
+                "calificacion_final": (
+                    float(historial["calificacion_final"])
+                    if historial["calificacion_final"] is not None
+                    else None
+                ),
                 "tipo_acreditacion": historial["tipo_acreditacion"],
             }
         )
@@ -249,6 +261,8 @@ def get_kardex_by_matricula(db: Session, matricula: str):
 
         if not materia_plan or not historial.materia:
             continue
+
+        materias_en_historial.add(historial.id_materia)
 
         cuatrimestre_num = (
             materia_plan.cuatrimestre.numero
@@ -276,12 +290,43 @@ def get_kardex_by_matricula(db: Session, matricula: str):
         ].append(
             {
                 "clave": historial.materia.clave or "",
+                "id_materia": historial.materia.id_materia,
                 "asignatura": historial.materia.nombre or "",
                 "creditos": float(historial.materia.creditos or 0),
                 "calificacion_final": float(historial.calificacion_final or 0),
                 "tipo_acreditacion": tipo_acreditacion,
             }
         )
+
+    if incluir_plan:
+        for plan_materia in plan_materias:
+            materia = plan_materia.materia
+
+            if not materia or plan_materia.id_materia in materias_en_historial:
+                continue
+
+            cuatrimestre_num = (
+                plan_materia.cuatrimestre.numero
+                if plan_materia.cuatrimestre
+                else 0
+            )
+
+            historial_map[
+                (
+                    cuatrimestre_num,
+                    "",
+                    "PLAN DE ESTUDIOS",
+                )
+            ].append(
+                {
+                    "clave": materia.clave or "",
+                    "id_materia": materia.id_materia,
+                    "asignatura": materia.nombre or "",
+                    "creditos": float(materia.creditos or 0),
+                    "calificacion_final": None,
+                    "tipo_acreditacion": "PENDIENTE",
+                }
+            )
 
     historial = []
 
@@ -327,7 +372,11 @@ def get_kardex_by_matricula(db: Session, matricula: str):
     }
 
 
-def get_kardex_by_query(db: Session, query: str):
+def get_kardex_by_query(
+    db: Session,
+    query: str,
+    incluir_plan: bool = False,
+):
     query = (query or "").strip()
 
     if not query:
@@ -368,4 +417,8 @@ def get_kardex_by_query(db: Session, query: str):
     if not alumno:
         return None
 
-    return get_kardex_by_matricula(db, alumno.matricula)
+    return get_kardex_by_matricula(
+        db,
+        alumno.matricula,
+        incluir_plan=incluir_plan,
+    )

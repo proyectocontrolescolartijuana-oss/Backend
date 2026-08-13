@@ -63,10 +63,15 @@ def obtener_mi_kardex(
 def obtener_kardex(
     matricula: str | None = Query(None, min_length=1),
     q: str | None = Query(None, min_length=1),
+    incluir_plan: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     termino = matricula or q or ""
-    kardex = get_kardex_by_query(db, query=termino)
+    kardex = get_kardex_by_query(
+        db,
+        query=termino,
+        incluir_plan=incluir_plan,
+    )
 
     if not kardex:
         raise HTTPException(

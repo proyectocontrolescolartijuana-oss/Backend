@@ -72,7 +72,7 @@ CREATE TABLE materias (
     id_materia BIGINT PRIMARY KEY AUTO_INCREMENT,
     clave VARCHAR(20) UNIQUE,
     nombre VARCHAR(150) NOT NULL,
-    creditos DECIMAL(5,2) NOT NULL,
+    creditos DECIMAL(6,3) NOT NULL,
     estado BOOLEAN DEFAULT TRUE,
 
     CONSTRAINT chk_creditos

@@ -5,7 +5,8 @@ from typing import Optional
 from app.schemas.detalles import (
     AlumnoDetalle,
     GrupoMateriaDetalleResponse,
-    ParcialDetalle
+    ParcialDetalle,
+    PeriodoDetalle
 )
 from app.utils.logo_url import construir_url_logo
 
@@ -63,6 +64,47 @@ class CapturaCalificacionesResponse(BaseModel):
     grupo_materia: GrupoMateriaDetalleResponse
     parciales: list[ParcialDetalle]
     alumnos: list[CapturaAlumnoResponse]
+
+
+class MonitoreoCalificacionItemResponse(BaseModel):
+    id_calificacion: Optional[int] = None
+    id_carga: int
+    id_parcial: int
+    calificacion: Optional[float] = None
+
+
+class MonitoreoAlumnoResponse(BaseModel):
+    id_carga: int
+    estatus: Optional[str] = None
+    alumno: Optional[AlumnoDetalle] = None
+    calificaciones: list[MonitoreoCalificacionItemResponse] = Field(
+        default_factory=list
+    )
+    capturadas: int = 0
+    pendientes: int = 0
+
+
+class MonitoreoGrupoMateriaResponse(BaseModel):
+    grupo_materia: GrupoMateriaDetalleResponse
+    alumnos: list[MonitoreoAlumnoResponse] = Field(default_factory=list)
+    total_alumnos: int = 0
+    total_calificaciones: int = 0
+    capturadas: int = 0
+    pendientes: int = 0
+    completo: bool = False
+
+
+class MonitoreoPeriodoResponse(BaseModel):
+    periodo: Optional[PeriodoDetalle] = None
+    parciales: list[ParcialDetalle] = Field(default_factory=list)
+    grupos_materia: list[MonitoreoGrupoMateriaResponse] = Field(
+        default_factory=list
+    )
+    total_grupos_materia: int = 0
+    total_alumnos: int = 0
+    total_calificaciones: int = 0
+    capturadas: int = 0
+    pendientes: int = 0
 
 
 class BoletaAlumnoResponse(BaseModel):

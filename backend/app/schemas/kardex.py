@@ -5,10 +5,11 @@ from app.utils.logo_url import construir_url_logo
 
 
 class KardexMateria(BaseModel):
+    id_materia: Optional[int] = None
     clave: str = ""
     asignatura: str = ""
     creditos: float = 0
-    calificacion_final: float = 0
+    calificacion_final: Optional[float] = None
     tipo_acreditacion: str = "OR"
 
 

@@ -34,7 +34,8 @@ from app.schemas.calificacion import (
     CalificacionUpdate,
     CapturaCalificacionesBatch,
     CapturaCalificacionesResponse,
-    CuadroHonorResponse
+    CuadroHonorResponse,
+    MonitoreoPeriodoResponse
 )
 from app.schemas.detalles import (
     CalificacionDetalleResponse,
@@ -82,6 +83,34 @@ def _parcial_detalle(parcial):
             if parcial.porcentaje is not None else None
         )
     }
+
+
+def _periodo_detalle(periodo):
+    if not periodo:
+        return None
+
+    return {
+        "id_periodo": periodo.id_periodo,
+        "nombre": periodo.nombre,
+        "estado": periodo.estado
+    }
+
+
+def _tiene_rol(usuario: Usuario, rol: str) -> bool:
+    return any(usuario_rol.nombre == rol for usuario_rol in usuario.roles)
+
+
+def _validar_control_escolar_o_admin(usuario: Usuario):
+    if _tiene_rol(usuario, "ADMIN") or _tiene_rol(
+        usuario,
+        "CONTROL_ESCOLAR"
+    ):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Solo Control Escolar o Admin pueden consultar este monitoreo"
+    )
 
 
 def _calcular_calificacion_final(calificaciones, parciales_por_id):
@@ -281,6 +310,26 @@ def _validar_grupo_docente(
     return grupo_materia
 
 
+def _validar_grupo_periodo_activo(db: Session, grupo_materia_id: int):
+    grupo_materia = (
+        db.query(GrupoMateria)
+        .join(GrupoMateria.periodo)
+        .filter(
+            GrupoMateria.id_grupo_materia == grupo_materia_id,
+            Periodo.estado == "ACTIVO"
+        )
+        .first()
+    )
+
+    if not grupo_materia:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El grupo no pertenece al periodo activo"
+        )
+
+    return grupo_materia
+
+
 def _get_grupos_docente_activos(db: Session, docente_id: int):
     grupos_ids = [
         grupo_id
@@ -376,6 +425,231 @@ def _build_captura_response(db: Session, grupo_materia_id: int):
             for carga in cargas
         ]
     }
+
+
+def _build_monitoreo_periodo_actual(db: Session):
+    periodo = (
+        db.query(Periodo)
+        .filter(Periodo.estado == "ACTIVO")
+        .order_by(Periodo.fecha_inicio.desc(), Periodo.id_periodo.desc())
+        .first()
+    )
+
+    if not periodo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No hay un periodo activo"
+        )
+
+    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
+    grupos_materia = (
+        db.query(GrupoMateria)
+        .options(
+            joinedload(GrupoMateria.grupo).joinedload(Grupo.cuatrimestre),
+            joinedload(GrupoMateria.materia),
+            joinedload(GrupoMateria.docente).joinedload(Docente.usuario),
+            joinedload(GrupoMateria.periodo),
+            joinedload(GrupoMateria.cargas)
+            .joinedload(CargaAcademica.alumno)
+            .joinedload(Alumno.usuario)
+        )
+        .filter(GrupoMateria.id_periodo == periodo.id_periodo)
+        .order_by(GrupoMateria.id_grupo, GrupoMateria.id_materia)
+        .all()
+    )
+
+    cargas = [
+        carga
+        for grupo_materia in grupos_materia
+        for carga in grupo_materia.cargas
+        if carga.estatus != "BAJA"
+    ]
+    cargas_ids = [carga.id_carga for carga in cargas]
+    calificaciones = []
+
+    if cargas_ids:
+        calificaciones = (
+            db.query(Calificacion)
+            .filter(Calificacion.id_carga.in_(cargas_ids))
+            .all()
+        )
+
+    calificaciones_por_celda = {
+        (calificacion.id_carga, calificacion.id_parcial): calificacion
+        for calificacion in calificaciones
+    }
+
+    grupos_response = []
+    total_alumnos = 0
+    total_calificaciones = 0
+    total_capturadas = 0
+    total_pendientes = 0
+
+    for grupo_materia in grupos_materia:
+        cargas_grupo = [
+            carga
+            for carga in grupo_materia.cargas
+            if carga.estatus != "BAJA"
+        ]
+
+        cargas_grupo.sort(
+            key=lambda carga: (
+                (
+                    carga.alumno.usuario.apellido_paterno
+                    if carga.alumno and carga.alumno.usuario else ""
+                ) or "",
+                (
+                    carga.alumno.usuario.apellido_materno
+                    if carga.alumno and carga.alumno.usuario else ""
+                ) or "",
+                (
+                    carga.alumno.usuario.nombre
+                    if carga.alumno and carga.alumno.usuario else ""
+                ) or ""
+            )
+        )
+
+        alumnos_response = []
+        capturadas_grupo = 0
+        pendientes_grupo = 0
+
+        for carga in cargas_grupo:
+            calificaciones_alumno = []
+            capturadas_alumno = 0
+            pendientes_alumno = 0
+
+            for parcial in parciales:
+                calificacion = calificaciones_por_celda.get(
+                    (carga.id_carga, parcial.id_parcial)
+                )
+                tiene_calificacion = (
+                    calificacion is not None
+                    and calificacion.calificacion is not None
+                )
+
+                if tiene_calificacion:
+                    capturadas_alumno += 1
+                else:
+                    pendientes_alumno += 1
+
+                calificaciones_alumno.append({
+                    "id_calificacion": (
+                        calificacion.id_calificacion
+                        if calificacion else None
+                    ),
+                    "id_carga": carga.id_carga,
+                    "id_parcial": parcial.id_parcial,
+                    "calificacion": (
+                        float(calificacion.calificacion)
+                        if tiene_calificacion else None
+                    )
+                })
+
+            capturadas_grupo += capturadas_alumno
+            pendientes_grupo += pendientes_alumno
+
+            alumnos_response.append({
+                "id_carga": carga.id_carga,
+                "estatus": carga.estatus,
+                "alumno": _alumno_detalle(carga.alumno),
+                "calificaciones": calificaciones_alumno,
+                "capturadas": capturadas_alumno,
+                "pendientes": pendientes_alumno
+            })
+
+        total_alumnos += len(cargas_grupo)
+        total_capturadas += capturadas_grupo
+        total_pendientes += pendientes_grupo
+
+        total_grupo = len(cargas_grupo) * len(parciales)
+        total_calificaciones += total_grupo
+
+        grupos_response.append({
+            "grupo_materia": get_grupo_materia_detalle(
+                db,
+                grupo_materia.id_grupo_materia
+            ),
+            "alumnos": alumnos_response,
+            "total_alumnos": len(cargas_grupo),
+            "total_calificaciones": total_grupo,
+            "capturadas": capturadas_grupo,
+            "pendientes": pendientes_grupo,
+            "completo": total_grupo > 0 and pendientes_grupo == 0
+        })
+
+    return {
+        "periodo": _periodo_detalle(periodo),
+        "parciales": [_parcial_detalle(parcial) for parcial in parciales],
+        "grupos_materia": grupos_response,
+        "total_grupos_materia": len(grupos_response),
+        "total_alumnos": total_alumnos,
+        "total_calificaciones": total_calificaciones,
+        "capturadas": total_capturadas,
+        "pendientes": total_pendientes
+    }
+
+
+def _guardar_calificaciones_batch(
+    db: Session,
+    captura: CapturaCalificacionesBatch,
+    usuario: Usuario
+):
+    cargas_validas = {
+        id_carga
+        for (id_carga,) in (
+            db.query(CargaAcademica.id_carga)
+            .filter(
+                CargaAcademica.id_grupo_materia == captura.grupo_materia_id
+            )
+            .all()
+        )
+    }
+
+    parciales_validos = {
+        id_parcial
+        for (id_parcial,) in db.query(Parcial.id_parcial).all()
+    }
+
+    for item in captura.calificaciones:
+        if item.id_carga not in cargas_validas:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="La carga academica no pertenece al grupo indicado"
+            )
+
+        if item.id_parcial not in parciales_validos:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parcial no encontrado"
+            )
+
+        calificacion = (
+            db.query(Calificacion)
+            .filter(
+                Calificacion.id_carga == item.id_carga,
+                Calificacion.id_parcial == item.id_parcial
+            )
+            .first()
+        )
+
+        if calificacion:
+            calificacion.calificacion = item.calificacion
+            calificacion.capturado_por = usuario.id_usuario
+            continue
+
+        if item.calificacion is None:
+            continue
+
+        db.add(
+            Calificacion(
+                id_carga=item.id_carga,
+                id_parcial=item.id_parcial,
+                calificacion=item.calificacion,
+                capturado_por=usuario.id_usuario
+            )
+        )
+
+    db.commit()
 
 
 def _build_boleta_final(db: Session, alumno_id: int, periodo_id: int):
@@ -587,6 +861,35 @@ def listar_grupos_captura(
 
 
 @router.get(
+    "/monitoreo/periodo-actual",
+    response_model=MonitoreoPeriodoResponse
+)
+def obtener_monitoreo_periodo_actual(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    _validar_control_escolar_o_admin(usuario)
+
+    return _build_monitoreo_periodo_actual(db)
+
+
+@router.post(
+    "/monitoreo/captura",
+    response_model=MonitoreoPeriodoResponse
+)
+def guardar_captura_monitoreo(
+    captura: CapturaCalificacionesBatch,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
+):
+    _validar_control_escolar_o_admin(usuario)
+    _validar_grupo_periodo_activo(db, captura.grupo_materia_id)
+    _guardar_calificaciones_batch(db, captura, usuario)
+
+    return _build_monitoreo_periodo_actual(db)
+
+
+@router.get(
     "/cuadro-honor",
     response_model=CuadroHonorResponse
 )
@@ -721,63 +1024,7 @@ def guardar_captura_calificaciones(
         captura.grupo_materia_id,
         docente.id_docente
     )
-
-    cargas_validas = {
-        id_carga
-        for (id_carga,) in (
-            db.query(CargaAcademica.id_carga)
-            .filter(
-                CargaAcademica.id_grupo_materia == captura.grupo_materia_id
-            )
-            .all()
-        )
-    }
-
-    parciales_validos = {
-        id_parcial
-        for (id_parcial,) in db.query(Parcial.id_parcial).all()
-    }
-
-    for item in captura.calificaciones:
-        if item.id_carga not in cargas_validas:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="La carga academica no pertenece al grupo asignado"
-            )
-
-        if item.id_parcial not in parciales_validos:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parcial no encontrado"
-            )
-
-        calificacion = (
-            db.query(Calificacion)
-            .filter(
-                Calificacion.id_carga == item.id_carga,
-                Calificacion.id_parcial == item.id_parcial
-            )
-            .first()
-        )
-
-        if calificacion:
-            calificacion.calificacion = item.calificacion
-            calificacion.capturado_por = usuario.id_usuario
-            continue
-
-        if item.calificacion is None:
-            continue
-
-        db.add(
-            Calificacion(
-                id_carga=item.id_carga,
-                id_parcial=item.id_parcial,
-                calificacion=item.calificacion,
-                capturado_por=usuario.id_usuario
-            )
-        )
-
-    db.commit()
+    _guardar_calificaciones_batch(db, captura, usuario)
 
     return _build_captura_response(db, captura.grupo_materia_id)
 

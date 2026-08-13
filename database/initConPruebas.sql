@@ -72,7 +72,7 @@ CREATE TABLE materias (
     id_materia BIGINT PRIMARY KEY AUTO_INCREMENT,
     clave VARCHAR(20) UNIQUE,
     nombre VARCHAR(150) NOT NULL,
-    creditos DECIMAL(5,2) NOT NULL,
+    creditos DECIMAL(6,3) NOT NULL,
     estado BOOLEAN DEFAULT TRUE,
 
     CONSTRAINT chk_creditos
@@ -2414,3 +2414,296 @@ INSERT INTO titulacion (
 (8, 8, 'TESIS', FALSE, FALSE, FALSE, FALSE, FALSE, NULL, NULL, FALSE, NULL, 'Proyecto de investigacion registrado.'),
 (9, 9, 'PROMEDIO', FALSE, TRUE, FALSE, FALSE, FALSE, NULL, NULL, FALSE, NULL, 'Requiere acreditar materia pendiente.'),
 (10, 10, 'TESINA', FALSE, FALSE, FALSE, FALSE, FALSE, NULL, NULL, FALSE, NULL, 'Registro preliminar de proceso de titulacion.');
+
+START TRANSACTION;
+
+INSERT INTO usuarios (
+    id_usuario,
+    nombre,
+    apellido_paterno,
+    apellido_materno,
+    correo,
+    password,
+    telefono,
+    estado
+) VALUES (
+    23,
+    'Gabriel',
+    'Lopez',
+    'Martinez',
+    'gabriel.lopez@alumnos.unifront.com',
+    (SELECT password FROM (SELECT password FROM usuarios WHERE id_usuario = 1) AS admin_password),
+    '6865552099',
+    'ACTIVO'
+) ON DUPLICATE KEY UPDATE
+    nombre = VALUES(nombre),
+    apellido_paterno = VALUES(apellido_paterno),
+    apellido_materno = VALUES(apellido_materno),
+    correo = VALUES(correo),
+    telefono = VALUES(telefono),
+    estado = VALUES(estado);
+
+INSERT IGNORE INTO usuario_roles (
+    id_usuario,
+    id_rol
+) VALUES (
+    23,
+    4
+);
+
+INSERT INTO alumnos (
+    id_alumno,
+    matricula,
+    numero_control,
+    id_usuario,
+    id_carrera,
+    id_plan,
+    fecha_nacimiento,
+    ciudad_nacimiento,
+    municipio_nacimiento,
+    nacionalidad,
+    sexo,
+    curp,
+    direccion,
+    ciudad,
+    estado,
+    correo_contacto,
+    fecha_ingreso,
+    estatus,
+    foto
+) VALUES (
+    11,
+    '20269999',
+    'UC20269999',
+    23,
+    1,
+    1,
+    '2002-04-15',
+    'Mexicali',
+    'Mexicali',
+    'Mexicana',
+    'M',
+    'GALO020415HBCMRN05',
+    'Calle Universidad 999, Colonia Centro',
+    'Mexicali',
+    'Baja California',
+    'gabriel.lopez@example.com',
+    '2022-09-05',
+    'EGRESADO',
+    NULL
+) ON DUPLICATE KEY UPDATE
+    numero_control = VALUES(numero_control),
+    id_usuario = VALUES(id_usuario),
+    id_carrera = VALUES(id_carrera),
+    id_plan = VALUES(id_plan),
+    estatus = 'EGRESADO';
+
+INSERT INTO periodos (
+    id_periodo,
+    nombre,
+    fecha_inicio,
+    fecha_fin,
+    estado
+) VALUES (
+    1,
+    'Enero - Abril 2027',
+    '2027-01-05',
+    '2027-04-30',
+    'ACTIVO'
+) ON DUPLICATE KEY UPDATE
+    nombre = VALUES(nombre),
+    fecha_inicio = VALUES(fecha_inicio),
+    fecha_fin = VALUES(fecha_fin),
+    estado = VALUES(estado);
+
+INSERT INTO grupos (
+    id_grupo,
+    nombre,
+    id_carrera,
+    id_cuatrimestre,
+    id_plan,
+    turno,
+    estatus
+) VALUES (
+    1,
+    'CRIM27',
+    1,
+    1,
+    1,
+    'MATUTINO',
+    'ACTIVO'
+) ON DUPLICATE KEY UPDATE
+    nombre = VALUES(nombre),
+    id_carrera = VALUES(id_carrera),
+    id_cuatrimestre = VALUES(id_cuatrimestre),
+    id_plan = VALUES(id_plan),
+    turno = VALUES(turno),
+    estatus = VALUES(estatus);
+
+INSERT INTO inscripciones (
+    id_inscripcion,
+    id_alumno,
+    id_grupo,
+    id_periodo,
+    fecha_inscripcion,
+    estado
+) VALUES (
+    11,
+    11,
+    1,
+    1,
+    '2026-07-30',
+    'FINALIZADO'
+) ON DUPLICATE KEY UPDATE
+    id_alumno = VALUES(id_alumno),
+    id_grupo = VALUES(id_grupo),
+    id_periodo = VALUES(id_periodo),
+    fecha_inscripcion = VALUES(fecha_inscripcion),
+    estado = VALUES(estado);
+
+INSERT INTO empresas (
+    id_empresa,
+    nombre,
+    direccion,
+    telefono,
+    correo
+) VALUES (
+    1,
+    'Instituto de Investigacion Criminologica del Noroeste',
+    'Blvd. Benito Juarez 1200, Mexicali, Baja California',
+    '6865550199',
+    'vinculacion@iicn.example.com'
+) ON DUPLICATE KEY UPDATE
+    nombre = VALUES(nombre),
+    direccion = VALUES(direccion),
+    telefono = VALUES(telefono),
+    correo = VALUES(correo);
+
+INSERT INTO servicio_social (
+    id_servicio,
+    id_alumno,
+    id_empresa,
+    horas_requeridas,
+    horas_completadas,
+    fecha_inicio,
+    fecha_fin,
+    estado,
+    carta_unifront,
+    carta_procedencia
+) VALUES (
+    11,
+    11,
+    1,
+    480,
+    480,
+    '2025-01-13',
+    '2025-07-18',
+    'COMPLETADO',
+    TRUE,
+    TRUE
+) ON DUPLICATE KEY UPDATE
+    id_alumno = VALUES(id_alumno),
+    id_empresa = VALUES(id_empresa),
+    horas_requeridas = VALUES(horas_requeridas),
+    horas_completadas = VALUES(horas_completadas),
+    fecha_inicio = VALUES(fecha_inicio),
+    fecha_fin = VALUES(fecha_fin),
+    estado = VALUES(estado),
+    carta_unifront = VALUES(carta_unifront),
+    carta_procedencia = VALUES(carta_procedencia);
+
+INSERT INTO practicas_profesionales (
+    id_practica,
+    id_alumno,
+    id_empresa,
+    proyecto,
+    asesor_empresa,
+    asesor_universidad,
+    fecha_inicio,
+    fecha_fin,
+    estado,
+    oficio_campo,
+    horas_campo
+) VALUES (
+    11,
+    11,
+    1,
+    'Analisis de expedientes criminologicos',
+    'Laura Mendoza Rios',
+    'Adriana Soto Mendez',
+    '2025-08-04',
+    '2026-01-23',
+    'COMPLETADO',
+    TRUE,
+    480
+) ON DUPLICATE KEY UPDATE
+    id_alumno = VALUES(id_alumno),
+    id_empresa = VALUES(id_empresa),
+    proyecto = VALUES(proyecto),
+    asesor_empresa = VALUES(asesor_empresa),
+    asesor_universidad = VALUES(asesor_universidad),
+    fecha_inicio = VALUES(fecha_inicio),
+    fecha_fin = VALUES(fecha_fin),
+    estado = VALUES(estado),
+    oficio_campo = VALUES(oficio_campo),
+    horas_campo = VALUES(horas_campo);
+
+INSERT INTO titulacion (
+    id_titulacion,
+    id_alumno,
+    modalidad,
+    cumple_promedio,
+    servicio_social_liberado,
+    practicas_liberadas,
+    certificado_emitido,
+    pagos_titulacion_completos,
+    numero_autorizacion,
+    acta_examen,
+    titulo_emitido,
+    fecha_titulacion,
+    observaciones
+) VALUES (
+    11,
+    11,
+    'PROMEDIO',
+    TRUE,
+    TRUE,
+    TRUE,
+    TRUE,
+    TRUE,
+    'TRAMITE',
+    'EN PROCESO',
+    FALSE,
+    NULL,
+    'Egresado de prueba con expediente academico y documentos base cargados.'
+) ON DUPLICATE KEY UPDATE
+    id_alumno = VALUES(id_alumno),
+    modalidad = VALUES(modalidad),
+    cumple_promedio = VALUES(cumple_promedio),
+    servicio_social_liberado = VALUES(servicio_social_liberado),
+    practicas_liberadas = VALUES(practicas_liberadas),
+    certificado_emitido = VALUES(certificado_emitido),
+    pagos_titulacion_completos = VALUES(pagos_titulacion_completos),
+    numero_autorizacion = VALUES(numero_autorizacion),
+    acta_examen = VALUES(acta_examen),
+    titulo_emitido = VALUES(titulo_emitido),
+    fecha_titulacion = VALUES(fecha_titulacion),
+    observaciones = VALUES(observaciones);
+
+INSERT INTO documentos_egresado (
+    id_documento,
+    id_alumno,
+    tipo,
+    nombre_archivo,
+    ruta_archivo
+) VALUES
+(11, 11, 'OFICIO_CAMPO', 'oficio_campo_gabriel_lopez.pdf', '/documentos-egresado/11/oficio_campo_gabriel_lopez.pdf'),
+(12, 11, 'CARTA_UNIFRONT', 'carta_unifront_gabriel_lopez.pdf', '/documentos-egresado/11/carta_unifront_gabriel_lopez.pdf'),
+(13, 11, 'CARTA_PROCEDENCIA', 'carta_procedencia_gabriel_lopez.pdf', '/documentos-egresado/11/carta_procedencia_gabriel_lopez.pdf')
+ON DUPLICATE KEY UPDATE
+    id_alumno = VALUES(id_alumno),
+    tipo = VALUES(tipo),
+    nombre_archivo = VALUES(nombre_archivo),
+    ruta_archivo = VALUES(ruta_archivo);
+
+COMMIT;

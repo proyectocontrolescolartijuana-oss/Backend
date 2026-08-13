@@ -30,7 +30,7 @@ class Materia(Base):
     )
 
     creditos = Column(
-        DECIMAL(5,2),
+        DECIMAL(6,3),
         nullable=False
     )
 

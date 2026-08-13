@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.database import get_db
+from app.models.usuario import Usuario
 from app.schemas.usuario import (
     UsuarioCreate,
     UsuarioResponse,
@@ -21,6 +23,32 @@ router = APIRouter(
     prefix="/usuarios",
     tags=["Usuarios"]
 )
+
+ROLES_PASSWORD_CONTROL_ESCOLAR = {"ALUMNO", "DOCENTE"}
+ROLES_PASSWORD_RESTRINGIDOS = {"ADMIN", "CONTROL_ESCOLAR"}
+
+def _tiene_rol(usuario: Usuario, rol: str) -> bool:
+    return any(usuario_rol.nombre == rol for usuario_rol in usuario.roles)
+
+def _puede_actualizar_password(
+    usuario_actual: Usuario,
+    usuario_objetivo: Usuario
+) -> bool:
+    if _tiene_rol(usuario_actual, "ADMIN"):
+        return True
+
+    if not _tiene_rol(usuario_actual, "CONTROL_ESCOLAR"):
+        return False
+
+    roles_objetivo = {
+        rol.nombre
+        for rol in usuario_objetivo.roles
+    }
+
+    return (
+        bool(roles_objetivo & ROLES_PASSWORD_CONTROL_ESCOLAR)
+        and not bool(roles_objetivo & ROLES_PASSWORD_RESTRINGIDOS)
+    )
 
 @router.get(
     "/",
@@ -84,8 +112,29 @@ def crear_usuario(
 def actualizar_usuario(
     usuario_id: int,
     usuario: UsuarioUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(get_current_user)
 ):
+    usuario_objetivo = get_usuario(db, usuario_id)
+
+    if not usuario_objetivo:
+        raise HTTPException(
+            status_code=404,
+            detail="Usuario no encontrado"
+        )
+
+    if usuario.password is not None and not _puede_actualizar_password(
+        usuario_actual,
+        usuario_objetivo
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Control escolar solo puede cambiar la contraseña de "
+                "alumnos y docentes"
+            )
+        )
+
     usuario_actualizado = update_usuario(
         db,
         usuario_id,
