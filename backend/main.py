@@ -64,6 +64,7 @@ app.mount(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:5173",
         "https://frontend-one-jet-55.vercel.app",
         "https://frontend-proyectocontrolescolar.vercel.app",
     ],

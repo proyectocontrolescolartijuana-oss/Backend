@@ -60,7 +60,22 @@ def _grupo_detalle(grupo):
     }
 
 
-def _grupo_actual(db, alumno_id):
+def _grupo_detalle(grupo):
+    if not grupo:
+        return None
+
+    return {
+        "id_grupo": grupo.id_grupo,
+        "nombre": grupo.nombre,
+        "turno": grupo.turno,
+        "id_carrera": grupo.id_carrera,
+        "estatus": grupo.estatus
+    }
+
+
+# ------------------- DATOS ACTUALES --------------------- #
+
+def _datos_academicos_actuales(db, alumno_id):
     inscripcion = (
         db.query(Inscripcion)
         .filter(Inscripcion.id_alumno == alumno_id)
@@ -71,10 +86,37 @@ def _grupo_actual(db, alumno_id):
         .first()
     )
 
-    return inscripcion.grupo if inscripcion else None
+    if not inscripcion:
+        return {
+            "periodo_cursado": None,
+            "nivel_educativo": None,
+            "grupo": None
+        }
+
+    periodo_nombre = inscripcion.periodo.nombre if inscripcion.periodo else None
+    
+    cuatrimestre_nombre = None
+    if inscripcion.grupo and inscripcion.grupo.cuatrimestre:
+        cuatrimestre_nombre = inscripcion.grupo.cuatrimestre.nombre
+
+    return {
+        "periodo_cursado": periodo_nombre,
+        "nivel_educativo": cuatrimestre_nombre,
+        "grupo": _grupo_detalle(inscripcion.grupo)
+    }
+
+# ----------------------------------------------------------- #
+
 
 
 def _alumno_detalle(alumno, db=None):
+    # Obtenemos todo el bloque académico actual en una sola consulta
+    academicos = _datos_academicos_actuales(db, alumno.id_alumno) if db else {
+        "periodo_cursado": None,
+        "nivel_educativo": None,
+        "grupo": None
+    }
+
     return {
         "id_alumno": alumno.id_alumno,
         "matricula": alumno.matricula,
@@ -103,6 +145,9 @@ def _alumno_detalle(alumno, db=None):
         "correo_contacto": alumno.correo_contacto,
         "fecha_ingreso": alumno.fecha_ingreso,
         "foto": alumno.foto,
+        # Nuevos campos automáticos:
+        "periodo_cursado": academicos.get("periodo_cursado"),
+        "nivel_educativo": academicos.get("nivel_educativo"),
         "carrera": {
             "id_carrera": alumno.carrera.id_carrera,
             "clave": alumno.carrera.clave,
@@ -113,7 +158,7 @@ def _alumno_detalle(alumno, db=None):
             "id_plan": alumno.plan.id_plan,
             "nombre_plan": alumno.plan.nombre_plan
         } if alumno.plan else None,
-        "grupo": _grupo_detalle(_grupo_actual(db, alumno.id_alumno)) if db else None
+        "grupo": academicos.get("grupo")
     }
 
 
