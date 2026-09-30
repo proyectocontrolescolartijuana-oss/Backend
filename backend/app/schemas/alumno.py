@@ -86,6 +86,8 @@ class AlumnoDetalleResponse(BaseModel):
     correo_contacto: Optional[str] = None
     fecha_ingreso: Optional[date] = None
     foto: Optional[str] = None
+    periodo_cursado: Optional[str] = None
+    nivel_educativo: Optional[str] = None
     carrera: Optional[AlumnoCarreraDetalle] = None
     plan: Optional[AlumnoPlanDetalle] = None
     grupo: Optional[AlumnoGrupoDetalle] = None
