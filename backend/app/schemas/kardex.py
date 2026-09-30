@@ -30,6 +30,8 @@ class KardexResponse(BaseModel):
     rvoe: str = ""
     logo: Optional[str] = None
     plan_estudios: str = ""
+    total_creditos_plan: Optional[float] = None
+    total_asignaturas_plan: Optional[int] = None
     historial: List[KardexCuatrimestre] = Field(default_factory=list)
     
     @field_validator("logo")

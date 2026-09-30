@@ -353,6 +353,17 @@ def get_kardex_by_matricula(
             }
         )
 
+    materias_plan_unicas = {
+        pm.id_materia: pm.materia
+        for pm in plan_materias
+        if pm.materia
+    }
+    total_creditos_plan = round(
+        sum(float(m.creditos or 0) for m in materias_plan_unicas.values()),
+        3,
+    )
+    total_asignaturas_plan = len(materias_plan_unicas)
+
     return {
         "matricula": alumno.matricula or "",
         "numero_control": alumno.numero_control or "",
@@ -368,6 +379,8 @@ def get_kardex_by_matricula(
             if alumno.plan
             else ""
         ),
+        "total_creditos_plan": total_creditos_plan,
+        "total_asignaturas_plan": total_asignaturas_plan,
         "historial": historial,
     }
 
