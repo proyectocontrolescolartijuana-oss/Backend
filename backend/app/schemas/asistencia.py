@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.detalles import (
     AlumnoDetalle,
@@ -14,6 +14,15 @@ class AsistenciaBase(BaseModel):
     id_parcial: Optional[int] = None
     fecha: date
     asistencia: bool
+    retardo: bool = False
+
+    @model_validator(mode="after")
+    def retardo_requiere_asistencia(self):
+
+        if not self.asistencia:
+            self.retardo = False
+
+        return self
 
 
 class AsistenciaCreate(AsistenciaBase):
@@ -25,6 +34,7 @@ class AsistenciaUpdate(BaseModel):
     id_parcial: Optional[int] = None
     fecha: Optional[date] = None
     asistencia: Optional[bool] = None
+    retardo: Optional[bool] = None
 
 
 class AsistenciaResponse(AsistenciaBase):
@@ -38,6 +48,14 @@ class CapturaAsistenciaItem(BaseModel):
     id_carga: int
     fecha: Optional[date] = None
     asistencia: bool
+    retardo: bool = False
+
+    @model_validator(mode="after")
+    def retardo_requiere_asistencia(self):
+        if not self.asistencia:
+            self.retardo = False
+
+        return self
 
 
 class CapturaAsistenciasBatch(BaseModel):
@@ -53,6 +71,7 @@ class CapturaAlumnoAsistenciaResponse(BaseModel):
     fecha: date
     id_parcial: Optional[int] = None
     asistencia: bool = False
+    retardo: bool = False
 
 
 class CapturaParcialAsistenciaResponse(BaseModel):
@@ -72,6 +91,7 @@ class CapturaAlumnoAsistenciaResumen(BaseModel):
         default_factory=list
     )
     total_asistencias: int = 0
+    total_retardos: int = 0
     total_clases: int = 0
     porcentaje_asistencia: Optional[float] = None
 
@@ -86,6 +106,7 @@ class CapturaAsistenciasResponse(BaseModel):
     grupo_materia: GrupoMateriaDetalleResponse
     parcial_seleccionado_id: Optional[int] = None
     fecha_seleccionada: Optional[date] = None
+    retardos_por_falta: Optional[int] = None
     fechas: list[date] = Field(default_factory=list)
     parciales: list[CapturaParcialAsistenciaResponse] = Field(
         default_factory=list

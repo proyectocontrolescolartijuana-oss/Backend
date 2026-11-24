@@ -10,6 +10,7 @@ from app.crud.crud_calificacion import (
     get_calificacion,
     update_calificacion
 )
+from app.crud.crud_desglose import get_parciales_con_desglose
 from app.crud.crud_detalles import (
     get_calificaciones_detalle,
     get_grupo_materia_detalle,
@@ -40,6 +41,16 @@ from app.schemas.calificacion import (
 from app.schemas.detalles import (
     CalificacionDetalleResponse,
     GrupoMateriaDetalleResponse
+)
+from app.services.esquema_evaluacion import (
+    EsquemaEvaluacionError,
+    calcular_calificacion_final,
+    es_aprobatoria,
+    esquema_de_grupo_materia,
+    modalidades_de_grupos_materias,
+    obtener_catalogo,
+    obtener_pesos,
+    MODALIDAD_POR_DEFECTO
 )
 
 
@@ -100,7 +111,10 @@ def _tiene_rol(usuario: Usuario, rol: str) -> bool:
     return any(usuario_rol.nombre == rol for usuario_rol in usuario.roles)
 
 
-def _validar_control_escolar_o_admin(usuario: Usuario):
+def _validar_control_escolar_o_admin(
+    usuario: Usuario,
+    accion: str = "consultar este monitoreo"
+):
     if _tiene_rol(usuario, "ADMIN") or _tiene_rol(
         usuario,
         "CONTROL_ESCOLAR"
@@ -109,43 +123,93 @@ def _validar_control_escolar_o_admin(usuario: Usuario):
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Solo Control Escolar o Admin pueden consultar este monitoreo"
+        detail=f"Solo Control Escolar o Admin pueden {accion}"
     )
 
 
-def _calcular_calificacion_final(calificaciones, parciales_por_id):
-    calificaciones_validas = [
-        calificacion
-        for calificacion in calificaciones
-        if calificacion.calificacion is not None
-    ]
+def _es_control_escolar_o_admin(usuario: Usuario) -> bool:
+    return _tiene_rol(usuario, "ADMIN") or _tiene_rol(
+        usuario,
+        "CONTROL_ESCOLAR"
+    )
 
-    if not calificaciones_validas:
-        return None
 
-    total = 0
-    peso_total = 0
+def _validar_consulta_calificaciones(
+    db: Session,
+    usuario: Usuario,
+    alumno_id: Optional[int],
+    grupo_id: Optional[int]
+):
+    """Control Escolar/Admin consultan todo; el alumno solo lo suyo;
+    el docente solo los grupos que imparte."""
+    if _es_control_escolar_o_admin(usuario):
+        return
 
-    for calificacion in calificaciones_validas:
-        parcial = parciales_por_id.get(calificacion.id_parcial)
-        peso = (
-            float(parcial.porcentaje)
-            if parcial and parcial.porcentaje is not None
-            else 0
+    if alumno_id is not None:
+        alumno = (
+            db.query(Alumno.id_alumno)
+            .filter(
+                Alumno.id_usuario == usuario.id_usuario,
+                Alumno.estatus != "BAJA"
+            )
+            .first()
         )
 
-        total += float(calificacion.calificacion) * peso
-        peso_total += peso
+        if alumno and alumno.id_alumno == alumno_id:
+            return
 
-    if peso_total > 0:
-        return round(total / peso_total, 2)
+    if grupo_id is not None:
+        docente = (
+            db.query(Docente.id_docente)
+            .filter(
+                Docente.id_usuario == usuario.id_usuario,
+                Docente.estado.is_(True)
+            )
+            .first()
+        )
 
-    promedio = sum(
-        float(calificacion.calificacion)
-        for calificacion in calificaciones_validas
-    ) / len(calificaciones_validas)
+        if docente and (
+            db.query(GrupoMateria.id_grupo_materia)
+            .filter(
+                GrupoMateria.id_grupo == grupo_id,
+                GrupoMateria.id_docente == docente.id_docente
+            )
+            .first()
+        ):
+            return
 
-    return round(promedio, 2)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="No tienes permiso para consultar estas calificaciones"
+    )
+
+
+def _error_esquema(error: EsquemaEvaluacionError):
+    """La configuracion de parciales no permite operar: se explica con 409."""
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=str(error)
+    )
+
+
+def _pesos_parciales(db: Session):
+    return obtener_pesos(db)
+
+
+def _calcular_calificacion_final(calificaciones, pesos):
+    """Calificacion final (float) de las calificaciones de una carga.
+
+    La formula vive en esquema_evaluacion; `pesos` es {id_parcial: peso}.
+    """
+    final = calcular_calificacion_final(
+        {
+            calificacion.id_parcial: calificacion.calificacion
+            for calificacion in calificaciones
+        },
+        pesos
+    )
+
+    return float(final) if final is not None else None
 
 
 def _generacion_alumno(alumno):
@@ -160,7 +224,7 @@ def _generacion_alumno(alumno):
 def _build_cuadro_honor_response(
     cargas,
     calificaciones_por_carga,
-    parciales_por_id,
+    pesos,
     tipo,
     cuatrimestre=None
 ):
@@ -177,7 +241,7 @@ def _build_cuadro_honor_response(
 
         calificacion_final = _calcular_calificacion_final(
             calificaciones_por_carga.get(carga.id_carga, []),
-            parciales_por_id
+            pesos
         )
 
         if calificacion_final is None:
@@ -353,7 +417,13 @@ def _get_grupos_docente_activos(db: Session, docente_id: int):
 
 def _build_captura_response(db: Session, grupo_materia_id: int):
     grupo_materia = get_grupo_materia_detalle(db, grupo_materia_id)
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
+
+    try:
+        esquema = esquema_de_grupo_materia(db, grupo_materia_id)
+    except EsquemaEvaluacionError as error:
+        raise _error_esquema(error)
+
+    parciales = list(esquema.parciales)
     cargas = (
         db.query(CargaAcademica)
         .options(
@@ -408,9 +478,24 @@ def _build_captura_response(db: Session, grupo_materia_id: int):
 
     return {
         "grupo_materia": grupo_materia,
+        "modalidad": esquema.modalidad,
+        "evaluacion_unica": esquema.evaluacion_unica,
         "parciales": [
             _parcial_detalle(parcial)
             for parcial in parciales
+        ],
+        "parciales_desglosables": [
+            parcial.id_parcial
+            for parcial in parciales
+            if esquema.admite_desglose(parcial.id_parcial)
+        ],
+        "parciales_con_desglose": [
+            id_parcial
+            for id_parcial in get_parciales_con_desglose(
+                db,
+                grupo_materia_id
+            )
+            if esquema.admite_desglose(id_parcial)
         ],
         "alumnos": [
             {
@@ -441,7 +526,21 @@ def _build_monitoreo_periodo_actual(db: Session):
             detail="No hay un periodo activo"
         )
 
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
+    try:
+        catalogo = obtener_catalogo(db)
+    except EsquemaEvaluacionError as error:
+        raise _error_esquema(error)
+
+    # Lista global (todas las modalidades) solo para compatibilidad; cada
+    # grupo trae sus propios parciales.
+    parciales = sorted(
+        (
+            parcial
+            for esquema in catalogo.values()
+            for parcial in esquema.parciales
+        ),
+        key=lambda parcial: parcial.id_parcial
+    )
     grupos_materia = (
         db.query(GrupoMateria)
         .options(
@@ -458,6 +557,10 @@ def _build_monitoreo_periodo_actual(db: Session):
         .all()
     )
 
+    modalidades = modalidades_de_grupos_materias(
+        db,
+        [grupo_materia.id_grupo_materia for grupo_materia in grupos_materia]
+    )
     cargas = [
         carga
         for grupo_materia in grupos_materia
@@ -486,6 +589,14 @@ def _build_monitoreo_periodo_actual(db: Session):
     total_pendientes = 0
 
     for grupo_materia in grupos_materia:
+        modalidad = modalidades.get(
+            grupo_materia.id_grupo_materia,
+            MODALIDAD_POR_DEFECTO
+        )
+        esquema_grupo = catalogo.get(modalidad)
+        parciales_grupo = (
+            list(esquema_grupo.parciales) if esquema_grupo else []
+        )
         cargas_grupo = [
             carga
             for carga in grupo_materia.cargas
@@ -518,7 +629,7 @@ def _build_monitoreo_periodo_actual(db: Session):
             capturadas_alumno = 0
             pendientes_alumno = 0
 
-            for parcial in parciales:
+            for parcial in parciales_grupo:
                 calificacion = calificaciones_por_celda.get(
                     (carga.id_carga, parcial.id_parcial)
                 )
@@ -561,7 +672,7 @@ def _build_monitoreo_periodo_actual(db: Session):
         total_capturadas += capturadas_grupo
         total_pendientes += pendientes_grupo
 
-        total_grupo = len(cargas_grupo) * len(parciales)
+        total_grupo = len(cargas_grupo) * len(parciales_grupo)
         total_calificaciones += total_grupo
 
         grupos_response.append({
@@ -569,6 +680,11 @@ def _build_monitoreo_periodo_actual(db: Session):
                 db,
                 grupo_materia.id_grupo_materia
             ),
+            "modalidad": modalidad,
+            "parciales": [
+                _parcial_detalle(parcial)
+                for parcial in parciales_grupo
+            ],
             "alumnos": alumnos_response,
             "total_alumnos": len(cargas_grupo),
             "total_calificaciones": total_grupo,
@@ -592,7 +708,8 @@ def _build_monitoreo_periodo_actual(db: Session):
 def _guardar_calificaciones_batch(
     db: Session,
     captura: CapturaCalificacionesBatch,
-    usuario: Usuario
+    usuario: Usuario,
+    respetar_desglose: bool = False
 ):
     cargas_validas = {
         id_carga
@@ -605,11 +722,12 @@ def _guardar_calificaciones_batch(
         )
     }
 
-    parciales_validos = {
-        id_parcial
-        for (id_parcial,) in db.query(Parcial.id_parcial).all()
-    }
+    try:
+        esquema = esquema_de_grupo_materia(db, captura.grupo_materia_id)
+    except EsquemaEvaluacionError as error:
+        raise _error_esquema(error)
 
+    # Se valida todo antes de modificar algo: o se guarda todo o nada.
     for item in captura.calificaciones:
         if item.id_carga not in cargas_validas:
             raise HTTPException(
@@ -617,11 +735,37 @@ def _guardar_calificaciones_batch(
                 detail="La carga academica no pertenece al grupo indicado"
             )
 
-        if item.id_parcial not in parciales_validos:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Parcial no encontrado"
+        if not esquema.contiene(item.id_parcial):
+            existe = (
+                db.query(Parcial.id_parcial)
+                .filter(Parcial.id_parcial == item.id_parcial)
+                .first()
             )
+
+            if not existe:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Parcial no encontrado"
+                )
+
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"El parcial {item.id_parcial} no pertenece a la "
+                    f"modalidad {esquema.modalidad}"
+                )
+            )
+
+    # La CPF de un parcial con desglose la calcula el sistema: el docente no
+    # puede sobrescribirla desde la captura general.
+    parciales_con_desglose = (
+        set(get_parciales_con_desglose(db, captura.grupo_materia_id))
+        if respetar_desglose else set()
+    )
+
+    for item in captura.calificaciones:
+        if item.id_parcial in parciales_con_desglose:
+            continue
 
         calificacion = (
             db.query(Calificacion)
@@ -690,11 +834,7 @@ def _build_boleta_final(db: Session, alumno_id: int, periodo_id: int):
     )
 
     cargas_ids = [carga.id_carga for carga in cargas]
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
-    parciales_por_id = {
-        parcial.id_parcial: parcial
-        for parcial in parciales
-    }
+    pesos = _pesos_parciales(db)
     calificaciones = []
 
     if cargas_ids:
@@ -727,7 +867,7 @@ def _build_boleta_final(db: Session, alumno_id: int, periodo_id: int):
         )
         calificacion_final = _calcular_calificacion_final(
             calificaciones_por_carga.get(carga.id_carga, []),
-            parciales_por_id
+            pesos
         )
 
         materias.append({
@@ -820,7 +960,7 @@ def _build_boleta_final(db: Session, alumno_id: int, periodo_id: int):
         "asignaturas_acreditadas": len([
             calificacion
             for calificacion in calificaciones_finales
-            if calificacion >= 70
+            if es_aprobatoria(calificacion)
         ])
     }
 
@@ -835,8 +975,11 @@ def listar_calificaciones(
     grupo_id: Optional[int] = None,
     periodo_id: Optional[int] = None,
     parcial_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_consulta_calificaciones(db, usuario, alumno_id, grupo_id)
+
     return get_calificaciones_detalle(
         db,
         alumno_id=alumno_id,
@@ -939,11 +1082,7 @@ def obtener_cuadro_honor(
 
     cargas = query.all()
     cargas_ids = [carga.id_carga for carga in cargas]
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
-    parciales_por_id = {
-        parcial.id_parcial: parcial
-        for parcial in parciales
-    }
+    pesos = _pesos_parciales(db)
     calificaciones_por_carga = {}
 
     if cargas_ids:
@@ -962,7 +1101,7 @@ def obtener_cuadro_honor(
     return _build_cuadro_honor_response(
         cargas,
         calificaciones_por_carga,
-        parciales_por_id,
+        pesos,
         "egresados" if egresados else "cuatrimestre",
         None if egresados else cuatrimestre
     )
@@ -975,8 +1114,18 @@ def obtener_cuadro_honor(
 def obtener_boleta_final(
     alumno_id: int,
     periodo_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    if not _es_control_escolar_o_admin(usuario):
+        alumno = _get_alumno_actual(db, usuario)
+
+        if alumno.id_alumno != alumno_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo puedes consultar tu propia boleta"
+            )
+
     return _build_boleta_final(db, alumno_id, periodo_id)
 
 
@@ -1024,7 +1173,12 @@ def guardar_captura_calificaciones(
         captura.grupo_materia_id,
         docente.id_docente
     )
-    _guardar_calificaciones_batch(db, captura, usuario)
+    _guardar_calificaciones_batch(
+        db,
+        captura,
+        usuario,
+        respetar_desglose=True
+    )
 
     return _build_captura_response(db, captura.grupo_materia_id)
 
@@ -1035,8 +1189,11 @@ def guardar_captura_calificaciones(
 )
 def obtener_calificacion(
     calificacion_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "consultar calificaciones")
+
     calificacion = next(
         (
             item for item in get_calificaciones_detalle(db)
@@ -1060,8 +1217,10 @@ def obtener_calificacion(
 )
 def crear_calificacion(
     calificacion: CalificacionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "crear calificaciones")
     nueva_calificacion = create_calificacion(db, calificacion)
 
     return next(
@@ -1077,8 +1236,10 @@ def crear_calificacion(
 def actualizar_calificacion(
     calificacion_id: int,
     calificacion: CalificacionUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "modificar calificaciones")
     calificacion_actualizada = update_calificacion(
         db,
         calificacion_id,
@@ -1103,8 +1264,11 @@ def actualizar_calificacion(
 )
 def eliminar_calificacion(
     calificacion_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "eliminar calificaciones")
+
     if not get_calificacion(db, calificacion_id):
         raise HTTPException(
             status_code=404,

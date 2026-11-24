@@ -47,6 +47,19 @@ def _nombre_usuario(usuario):
     return " ".join(parte for parte in partes if parte)
 
 
+def _cuatrimestre_detalle(grupo):
+    cuatrimestre = getattr(grupo, "cuatrimestre", None)
+
+    if not cuatrimestre:
+        return None
+
+    return {
+        "id_cuatrimestre": cuatrimestre.id_cuatrimestre,
+        "numero": cuatrimestre.numero,
+        "nombre": cuatrimestre.nombre
+    }
+
+
 def _grupo_detalle(grupo):
     if not grupo:
         return None
@@ -56,7 +69,9 @@ def _grupo_detalle(grupo):
         "nombre": grupo.nombre,
         "turno": grupo.turno,
         "id_carrera": grupo.id_carrera,
-        "estatus": grupo.estatus
+        "id_cuatrimestre": getattr(grupo, "id_cuatrimestre", None),
+        "estatus": grupo.estatus,
+        "cuatrimestre": _cuatrimestre_detalle(grupo)
     }
 
 

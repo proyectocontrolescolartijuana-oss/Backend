@@ -62,7 +62,11 @@ class CapturaAlumnoResponse(BaseModel):
 
 class CapturaCalificacionesResponse(BaseModel):
     grupo_materia: GrupoMateriaDetalleResponse
+    modalidad: Optional[str] = None
+    evaluacion_unica: bool = False
     parciales: list[ParcialDetalle]
+    parciales_desglosables: list[int] = Field(default_factory=list)
+    parciales_con_desglose: list[int] = Field(default_factory=list)
     alumnos: list[CapturaAlumnoResponse]
 
 
@@ -86,6 +90,8 @@ class MonitoreoAlumnoResponse(BaseModel):
 
 class MonitoreoGrupoMateriaResponse(BaseModel):
     grupo_materia: GrupoMateriaDetalleResponse
+    modalidad: Optional[str] = None
+    parciales: list[ParcialDetalle] = Field(default_factory=list)
     alumnos: list[MonitoreoAlumnoResponse] = Field(default_factory=list)
     total_alumnos: int = 0
     total_calificaciones: int = 0

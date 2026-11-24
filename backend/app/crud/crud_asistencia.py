@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.crud._crud_utils import to_create_data, to_update_data
+from app.crud.crud_calificacion import validar_parcial_de_la_carga
 from app.models.asistencia import Asistencia
 
 
@@ -17,7 +18,16 @@ def get_asistencia(db: Session, asistencia_id: int):
 
 
 def create_asistencia(db: Session, asistencia_data):
-    nueva_asistencia = Asistencia(**to_create_data(asistencia_data))
+    datos = to_create_data(asistencia_data)
+
+    if datos.get("id_parcial") is not None:
+        validar_parcial_de_la_carga(
+            db,
+            datos["id_carga"],
+            datos["id_parcial"]
+        )
+
+    nueva_asistencia = Asistencia(**datos)
 
     db.add(nueva_asistencia)
     db.commit()
@@ -32,7 +42,18 @@ def update_asistencia(db: Session, asistencia_id: int, asistencia_data):
     if not asistencia:
         return None
 
-    for key, value in to_update_data(asistencia_data).items():
+    datos = to_update_data(asistencia_data)
+    id_parcial = datos.get("id_parcial", asistencia.id_parcial)
+
+    # Se valida la combinacion resultante carga + parcial, no solo lo enviado.
+    if id_parcial is not None:
+        validar_parcial_de_la_carga(
+            db,
+            datos.get("id_carga", asistencia.id_carga),
+            id_parcial
+        )
+
+    for key, value in datos.items():
         setattr(asistencia, key, value)
 
     db.commit()

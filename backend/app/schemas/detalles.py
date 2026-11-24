@@ -47,6 +47,7 @@ class GrupoDetalle(BaseModel):
     id_carrera: Optional[int] = None
     id_plan: Optional[int] = None
     estatus: Optional[str] = None
+    modalidad: Optional[str] = None
     cuatrimestre: Optional[CuatrimestreDetalle] = None
 
 

@@ -44,6 +44,7 @@ from app.routers import (
     plan_estudio,
     reportes,
     kardex,
+    desglose,
 )
 
 
@@ -64,6 +65,7 @@ app.mount(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:5173",
         "https://frontend-one-jet-55.vercel.app",
         "https://frontend-proyectocontrolescolar.vercel.app",
     ],
@@ -115,3 +117,4 @@ app.include_router(documentos_egresados.router)
 app.include_router(plan_estudio.router)
 app.include_router(reportes.router)
 app.include_router(kardex.router)
+app.include_router(desglose.router)

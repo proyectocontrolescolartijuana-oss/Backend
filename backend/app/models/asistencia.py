@@ -34,6 +34,14 @@ class Asistencia(Base):
 
     asistencia = Column(Boolean)
 
+
+    retardo = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0"
+    )
+
     carga = relationship("CargaAcademica")
 
     parcial = relationship("Parcial")

@@ -17,6 +17,11 @@ from app.models.grupo_materia import GrupoMateria
 from app.models.inscripcion import Inscripcion
 from app.models.materia import Materia
 from app.models.parcial import Parcial
+from app.services.esquema_evaluacion import (
+    EsquemaEvaluacionError,
+    calcular_calificacion_final,
+    esquema_de_grupo
+)
 from app.models.periodo import Periodo
 from app.models.plan_estudio import PlanEstudio
 from app.models.recepcion_documento import RecepcionDocumento
@@ -575,25 +580,16 @@ def _calcular_final_concentrado(
     calificaciones_por_parcial: dict[int, float | None],
     parciales: list[Parcial]
 ) -> float | None:
-    total = 0
-    peso_total = 0
-    valores = []
+    """Calificacion final con la formula del modulo unico de evaluacion."""
+    final = calcular_calificacion_final(
+        calificaciones_por_parcial,
+        {
+            parcial.id_parcial: parcial.porcentaje or 0
+            for parcial in parciales
+        }
+    )
 
-    for parcial in parciales:
-        calificacion = calificaciones_por_parcial.get(parcial.id_parcial)
-
-        if calificacion is None:
-            continue
-
-        valores.append(calificacion)
-        peso = _to_float(parcial.porcentaje) or 0
-        total += calificacion * peso
-        peso_total += peso
-
-    if peso_total > 0:
-        return round(total / peso_total, 2)
-
-    return _promedio_valores(valores)
+    return float(final) if final is not None else None
 
 
 def _porcentaje_asistencia(asistencias: int, clases: int) -> float | None:
@@ -729,8 +725,12 @@ def _build_concentrado_materia(
                 _formato_calificacion(calificacion)
                 for calificacion in calificaciones_parciales
             ],
-            "promedio_primeros_parciales": _formato_calificacion(
-                _promedio_valores(calificaciones_parciales[:2])
+            # Con una sola evaluacion (sabatina) no hay "primeros parciales".
+            "promedio_primeros_parciales": (
+                _formato_calificacion(
+                    _promedio_valores(calificaciones_parciales[:2])
+                )
+                if len(parciales) > 1 else None
             ),
             "promedio_final": _formato_calificacion(
                 _calcular_final_concentrado(calificaciones_carga, parciales)
@@ -824,13 +824,15 @@ def _get_concentrado_calificaciones_data(
             detail="Periodo no encontrado"
         )
 
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
-
-    if not parciales:
+    try:
+        esquema = esquema_de_grupo(db, grupo_id)
+    except EsquemaEvaluacionError as error:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No hay parciales registrados"
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error)
         )
+
+    parciales = list(esquema.parciales)
 
     grupos_materias = (
         db.query(GrupoMateria)
@@ -848,10 +850,13 @@ def _get_concentrado_calificaciones_data(
 
     return {
         "titulo": "Concentrado de Calificaciones",
+        "modalidad": esquema.modalidad,
+        "evaluacion_unica": esquema.evaluacion_unica,
         "grupo": {
             "id_grupo": grupo.id_grupo,
             "nombre": grupo.nombre,
             "turno": grupo.turno,
+            "modalidad": esquema.modalidad,
             "carrera": {
                 "id_carrera": grupo.carrera.id_carrera,
                 "nombre": grupo.carrera.nombre,
@@ -905,13 +910,13 @@ def _sheet_concentrado_materia(
             "header": label
         })
 
-    columns.extend([
-        {
+    if not concentrado.get("evaluacion_unica"):
+        columns.append({
             "key": "promedio_primeros_parciales",
             "header": "Promedio 1er y 2do parcial"
-        },
-        {"key": "promedio_final", "header": "Promedio"},
-    ])
+        })
+
+    columns.append({"key": "promedio_final", "header": "Promedio"})
 
     for index, parcial in enumerate(parciales, start=1):
         label = (parcial.get("nombre") or f"Parcial {index}").upper()

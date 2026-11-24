@@ -22,6 +22,7 @@ from app.models.servicio_social import ServicioSocial
 from app.models.tutor import Tutor
 from app.models.usuario import Usuario
 from app.models.usuario_rol import usuario_roles
+from app.services.esquema_evaluacion import MODALIDAD_POR_DEFECTO
 
 
 def _nombre_usuario(usuario):
@@ -96,6 +97,9 @@ def _grupo(grupo):
         "id_carrera": grupo.id_carrera,
         "id_plan": grupo.id_plan,
         "estatus": grupo.estatus,
+        "modalidad": (
+            grupo.carrera.modalidad if grupo.carrera else None
+        ) or MODALIDAD_POR_DEFECTO,
         "cuatrimestre": _cuatrimestre(grupo.cuatrimestre)
     }
 

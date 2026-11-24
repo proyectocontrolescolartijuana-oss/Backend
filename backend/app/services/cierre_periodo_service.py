@@ -13,14 +13,24 @@ from app.models.grupo import Grupo
 from app.models.grupo_materia import GrupoMateria
 from app.models.historial_academico import HistorialAcademico
 from app.models.inscripcion import Inscripcion
-from app.models.parcial import Parcial
 from app.models.periodo import Periodo
 from app.models.plan_estudio import PlanEstudio
 from app.models.plan_materia import PlanMateria
 from app.services.elegibilidad_academica import validar_prerrequisitos
+from app.services.esquema_evaluacion import (
+    CALIFICACION_APROBATORIA as _CALIFICACION_APROBATORIA,
+    MODALIDAD_POR_DEFECTO,
+    calcular_calificacion_final,
+    es_aprobatoria,
+    modalidades_de_grupos_materias,
+    obtener_catalogo,
+    obtener_pesos,
+)
 
 
-CALIFICACION_APROBATORIA = 70
+# Se conserva el nombre por si otro modulo lo importa; el valor vive en
+# esquema_evaluacion.
+CALIFICACION_APROBATORIA = int(_CALIFICACION_APROBATORIA)
 
 
 def _periodo_pendiente_siguiente(db: Session, periodo: Periodo):
@@ -52,33 +62,17 @@ def _grupos_del_periodo(db: Session, periodo_id: int):
     )
 
 
-def _calificacion_final(carga: CargaAcademica, parciales_por_id):
-    calificaciones = [
-        calificacion
-        for calificacion in carga_calificaciones(carga)
-        if calificacion.calificacion is not None
-    ]
-
-    if not calificaciones:
-        return None
-
-    total = 0
-    peso_total = 0
-
-    for calificacion in calificaciones:
-        parcial = parciales_por_id.get(calificacion.id_parcial)
-        peso = float(parcial.porcentaje) if parcial and parcial.porcentaje else 0
-        total += float(calificacion.calificacion) * peso
-        peso_total += peso
-
-    if peso_total > 0:
-        return round(total / peso_total, 2)
-
-    return round(
-        sum(float(calificacion.calificacion) for calificacion in calificaciones)
-        / len(calificaciones),
-        2,
+def _calificacion_final(carga: CargaAcademica, pesos):
+    """Calificacion final (float) segun el modulo unico de evaluacion."""
+    final = calcular_calificacion_final(
+        {
+            calificacion.id_parcial: calificacion.calificacion
+            for calificacion in carga_calificaciones(carga)
+        },
+        pesos,
     )
+
+    return float(final) if final is not None else None
 
 
 def carga_calificaciones(carga: CargaAcademica):
@@ -123,15 +117,30 @@ def _calificaciones_por_carga(db: Session, cargas):
 
 def _cerrar_cargas(db: Session, periodo_id: int, resumen: dict, preview: bool):
     cargas = _cargas_periodo(db, periodo_id)
-    parciales = db.query(Parcial).all()
-    parciales_por_id = {parcial.id_parcial: parcial for parcial in parciales}
+    # EsquemaEvaluacionError es ValueError: llega como error de cierre.
+    catalogo = obtener_catalogo(db)
+    pesos = obtener_pesos(db)
+    modalidades = modalidades_de_grupos_materias(
+        db,
+        [carga.id_grupo_materia for carga in cargas],
+    )
     calificaciones_por_carga = _calificaciones_por_carga(db, cargas)
     incompletas = []
 
     for carga in cargas:
         setattr(carga, "calificaciones", calificaciones_por_carga.get(carga.id_carga, []))
+        modalidad = modalidades.get(carga.id_grupo_materia, MODALIDAD_POR_DEFECTO)
+        esquema = catalogo.get(modalidad)
 
-        if parciales and len(carga_calificaciones(carga)) < len(parciales):
+        if esquema is None:
+            # Sin parciales no se puede calcular la final: marcar NP a todos
+            # seria un error silencioso, asi que se bloquea el cierre.
+            raise ValueError(
+                f"No se puede cerrar el periodo: la modalidad {modalidad} "
+                "no tiene parciales configurados"
+            )
+
+        if len(carga_calificaciones(carga)) < len(esquema.parciales):
             incompletas.append(carga)
 
     if incompletas:
@@ -143,12 +152,12 @@ def _cerrar_cargas(db: Session, periodo_id: int, resumen: dict, preview: bool):
     for carga in cargas:
         grupo_materia = carga.grupo_materia
         materia = grupo_materia.materia if grupo_materia else None
-        final = _calificacion_final(carga, parciales_por_id)
+        final = _calificacion_final(carga, pesos)
         resultado = (
             "NP"
             if final is None
             else "APROBADO"
-            if final >= CALIFICACION_APROBATORIA
+            if es_aprobatoria(final)
             else "REPROBADO"
         )
 

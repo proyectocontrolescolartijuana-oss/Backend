@@ -24,6 +24,7 @@ from app.models.grupo_materia import GrupoMateria
 from app.models.parcial import Parcial
 from app.models.periodo import Periodo
 from app.models.usuario import Usuario
+from app.utils.asistencia import RETARDOS_POR_FALTA, asistencias_efectivas
 from app.schemas.asistencia import (
     AsistenciaCreate,
     AsistenciaUpdate,
@@ -33,6 +34,10 @@ from app.schemas.asistencia import (
 from app.schemas.detalles import (
     AsistenciaDetalleResponse,
     GrupoMateriaDetalleResponse
+)
+from app.services.esquema_evaluacion import (
+    EsquemaEvaluacionError,
+    esquema_de_grupo_materia
 )
 
 
@@ -65,6 +70,18 @@ def _alumno_detalle(alumno):
         "numero_control": alumno.numero_control,
         "nombre": _nombre_usuario(alumno.usuario)
     }
+
+
+def _validar_control_escolar_o_admin(usuario: Usuario, accion: str):
+    roles = {rol.nombre for rol in usuario.roles}
+
+    if roles & {"ADMIN", "CONTROL_ESCOLAR"}:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Solo Control Escolar o Admin pueden {accion}"
+    )
 
 
 def _get_docente_actual(db: Session, usuario: Usuario):
@@ -140,9 +157,18 @@ def _validar_fecha_no_futura(fecha_captura: Optional[date]):
         )
 
 
-def _get_parciales(db: Session):
-    parciales = db.query(Parcial).order_by(Parcial.id_parcial).all()
+def _get_esquema(db: Session, grupo_materia_id: int):
+    try:
+        return esquema_de_grupo_materia(db, grupo_materia_id)
+    except EsquemaEvaluacionError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error)
+        )
 
+
+def _get_parciales(esquema):
+    """Parciales que le tocan al grupo segun su modalidad."""
     return [
         {
             "id_parcial": parcial.id_parcial,
@@ -155,25 +181,38 @@ def _get_parciales(db: Session):
             "fecha_fin": None,
             "fechas": []
         }
-        for parcial in parciales
+        for parcial in esquema.parciales
     ]
 
 
-def _validar_parcial(db: Session, parcial_id: Optional[int]):
-    parciales = _get_parciales(db)
-
-    if not parciales:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No hay parciales registrados"
-        )
-
+def _validar_parcial(
+    db: Session,
+    grupo_materia_id: int,
+    parcial_id: Optional[int]
+):
+    esquema = _get_esquema(db, grupo_materia_id)
+    parciales = _get_parciales(esquema)
     parcial_id = parcial_id or parciales[0]["id_parcial"]
 
-    if not any(parcial["id_parcial"] == parcial_id for parcial in parciales):
+    if not esquema.contiene(parcial_id):
+        existe = (
+            db.query(Parcial.id_parcial)
+            .filter(Parcial.id_parcial == parcial_id)
+            .first()
+        )
+
+        if not existe:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Parcial no encontrado"
+            )
+
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Parcial no encontrado"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"El parcial {parcial_id} no pertenece a la modalidad "
+                f"{esquema.modalidad}"
+            )
         )
 
     return parcial_id, parciales
@@ -213,7 +252,11 @@ def _build_captura_response(
     fecha_seleccionada: Optional[date] = None
 ):
     grupo_materia = get_grupo_materia_detalle(db, grupo_materia_id)
-    parcial_seleccionado_id, parciales = _validar_parcial(db, parcial_id)
+    parcial_seleccionado_id, parciales = _validar_parcial(
+        db,
+        grupo_materia_id,
+        parcial_id
+    )
     cargas = (
         db.query(CargaAcademica)
         .options(
@@ -286,7 +329,8 @@ def _build_captura_response(
             "id_carga": carga.id_carga,
             "fecha": fecha_clase,
             "id_parcial": parcial_seleccionado_id,
-            "asistencia": bool(asistencia.asistencia) if asistencia else False
+            "asistencia": bool(asistencia.asistencia) if asistencia else False,
+            "retardo": bool(asistencia.retardo) if asistencia else False
         }
 
     total_clases = len(fechas)
@@ -301,8 +345,18 @@ def _build_captura_response(
             1 for asistencia in celdas
             if asistencia["asistencia"]
         )
+        total_retardos = sum(
+            1 for asistencia in celdas
+            if asistencia["retardo"]
+        )
         porcentaje = (
-            round((total_asistencias / total_clases) * 100, 2)
+            round(
+                (
+                    asistencias_efectivas(total_asistencias, total_retardos)
+                    / total_clases
+                ) * 100,
+                2
+            )
             if total_clases else None
         )
 
@@ -312,6 +366,7 @@ def _build_captura_response(
             "alumno": _alumno_detalle(carga.alumno),
             "asistencias": celdas,
             "total_asistencias": total_asistencias,
+            "total_retardos": total_retardos,
             "total_clases": total_clases,
             "porcentaje_asistencia": porcentaje
         })
@@ -327,6 +382,7 @@ def _build_captura_response(
         "grupo_materia": grupo_materia,
         "parcial_seleccionado_id": parcial_seleccionado_id,
         "fecha_seleccionada": fecha_seleccionada,
+        "retardos_por_falta": RETARDOS_POR_FALTA,
         "fechas": fechas,
         "parciales": parciales_asistencia,
         "resumen": {
@@ -349,8 +405,11 @@ def listar_asistencias(
     periodo_id: Optional[int] = None,
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "consultar asistencias")
+
     return get_asistencias_detalle(
         db,
         alumno_id=alumno_id,
@@ -413,13 +472,17 @@ def guardar_captura_asistencia(
     usuario: Usuario = Depends(get_current_user)
 ):
     _validar_fecha_no_futura(captura.fecha)
-    parcial_seleccionado_id, _ = _validar_parcial(db, captura.id_parcial)
 
     docente = _get_docente_actual(db, usuario)
     _validar_grupo_docente_activo(
         db,
         captura.grupo_materia_id,
         docente.id_docente
+    )
+    parcial_seleccionado_id, _ = _validar_parcial(
+        db,
+        captura.grupo_materia_id,
+        captura.id_parcial
     )
 
     cargas_validas = {
@@ -463,6 +526,7 @@ def guardar_captura_asistencia(
         if asistencias_existentes:
             for asistencia in asistencias_existentes:
                 asistencia.asistencia = item.asistencia
+                asistencia.retardo = item.retardo
                 asistencia.id_parcial = parcial_seleccionado_id
             continue
 
@@ -471,7 +535,8 @@ def guardar_captura_asistencia(
                 id_carga=item.id_carga,
                 id_parcial=parcial_seleccionado_id,
                 fecha=fecha_asistencia,
-                asistencia=item.asistencia
+                asistencia=item.asistencia,
+                retardo=item.retardo
             )
         )
 
@@ -491,8 +556,10 @@ def guardar_captura_asistencia(
 )
 def obtener_asistencia(
     asistencia_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "consultar asistencias")
     asistencia = get_asistencia_detalle(db, asistencia_id)
 
     if not asistencia:
@@ -510,8 +577,10 @@ def obtener_asistencia(
 )
 def crear_asistencia(
     asistencia: AsistenciaCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "crear asistencias")
     nueva_asistencia = create_asistencia(db, asistencia)
 
     return get_asistencia_detalle(db, nueva_asistencia.id_asistencia)
@@ -524,8 +593,10 @@ def crear_asistencia(
 def actualizar_asistencia(
     asistencia_id: int,
     asistencia: AsistenciaUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "modificar asistencias")
     asistencia_actualizada = update_asistencia(db, asistencia_id, asistencia)
 
     if not asistencia_actualizada:
@@ -543,8 +614,10 @@ def actualizar_asistencia(
 )
 def eliminar_asistencia(
     asistencia_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user)
 ):
+    _validar_control_escolar_o_admin(usuario, "eliminar asistencias")
     eliminada = delete_asistencia(db, asistencia_id)
 
     if not eliminada:

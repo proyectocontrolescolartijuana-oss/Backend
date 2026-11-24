@@ -54,12 +54,19 @@ class AlumnoPlanDetalle(BaseModel):
     nombre_plan: Optional[str] = None
 
 
+class AlumnoCuatrimestreDetalle(BaseModel):
+    id_cuatrimestre: int
+    numero: Optional[int] = None
+    nombre: Optional[str] = None
+
+
 class AlumnoGrupoDetalle(BaseModel):
     id_grupo: int
     nombre: Optional[str] = None
     turno: Optional[str] = None
     id_carrera: Optional[int] = None
     estatus: Optional[str] = None
+    cuatrimestre: Optional[AlumnoCuatrimestreDetalle] = None
 
 
 class AlumnoDetalleResponse(BaseModel):

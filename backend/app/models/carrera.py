@@ -45,6 +45,17 @@ class Carrera(Base):
         nullable=False
     )
 
+    # Define el formato del concentrado de calificaciones.
+    modalidad = Column(
+        Enum(
+            "CUATRIMESTRAL",
+            "SABATINA"
+        ),
+        nullable=False,
+        default="CUATRIMESTRAL",
+        server_default="CUATRIMESTRAL"
+    )
+
     duracion_cuatrimestres = Column(
         Integer,
         nullable=False

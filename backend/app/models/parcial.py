@@ -2,7 +2,8 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
-    DECIMAL
+    DECIMAL,
+    Enum
 )
 
 from sqlalchemy.orm import relationship
@@ -19,6 +20,17 @@ class Parcial(Base):
     )
 
     nombre = Column(String(50))
+
+    # Cada modalidad de carrera tiene su propio conjunto de parciales.
+    modalidad = Column(
+        Enum(
+            "CUATRIMESTRAL",
+            "SABATINA"
+        ),
+        nullable=False,
+        default="CUATRIMESTRAL",
+        server_default="CUATRIMESTRAL"
+    )
 
     porcentaje = Column(
         DECIMAL(5,2)
